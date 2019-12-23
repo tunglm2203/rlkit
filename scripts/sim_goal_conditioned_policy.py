@@ -58,5 +58,10 @@ if __name__ == "__main__":
     parser.add_argument('--multitaskpause', action='store_true')
     parser.add_argument('--hide', action='store_true')
     args = parser.parse_args()
+    # Get argument from command line
+    print('--------- YOUR SETTING ---------')
+    for arg in vars(args):
+        print("%15s: %s" % (str(arg), str(getattr(args, arg))))
+    print("")
 
     simulate_policy(args)
