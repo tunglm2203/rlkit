@@ -104,7 +104,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             {'latent_achieved_goal': new_obs['latent_achieved_goal'],
              'latent_desired_goal': new_obs['latent_desired_goal']}
         )
-        self.try_render(new_obs)
+        self.try_render(new_obs, obs['image_desired_goal'])
         return new_obs, reward, done, info
 
     def _update_obs(self, obs):
@@ -332,7 +332,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
         self.render_goals = False
         self.render_rollouts = False
 
-    def try_render(self, obs):
+    def try_render(self, obs, original_goal=None):
         if self.render_rollouts:
             img = obs['image_observation'].reshape(
                 self.input_channels,
@@ -363,8 +363,14 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
                 self.imsize,
                 self.imsize,
             ).transpose()
-            cv2.imshow('goal', goal)
+            cv2.imshow('goal_reconstruction', goal)
             cv2.waitKey(1)
+            if original_goal is not None:
+                cv2.imshow('goal', original_goal.reshape((
+                    self.input_channels,
+                    self.imsize,
+                    self.imsize)).transpose())
+                cv2.waitKey(1)
 
     def _sample_vae_prior(self, batch_size):
         if self.sample_from_true_prior:
