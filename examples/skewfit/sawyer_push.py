@@ -1,5 +1,6 @@
 import rlkit.util.hyperparameter as hyp
 from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in
+from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in_aim_v0
 from rlkit.launchers.launcher_util import run_experiment
 import rlkit.torch.vae.vae_schedules as vae_schedules
 from rlkit.launchers.skewfit_experiments import skewfit_full_experiment
@@ -12,7 +13,7 @@ if __name__ == "__main__":
         double_algo=False,
         online_vae_exploration=False,
         imsize=48,
-        init_camera=sawyer_init_camera_zoomed_in,
+        init_camera=sawyer_init_camera_zoomed_in_aim_v0,
         env_id='SawyerPushNIPSEasy-v0',
         skewfit_variant=dict(
             save_video=True,
@@ -93,7 +94,7 @@ if __name__ == "__main__":
                 N=40,
                 test_p=.9,
                 use_cached=False,
-                show=False,
+                show=True,
                 oracle_dataset=True,
                 oracle_dataset_using_set_to_goal=True,
                 n_random_steps=100,
@@ -133,13 +134,9 @@ if __name__ == "__main__":
 
     n_seeds = 1
     mode = 'local'
-    exp_prefix = 'dev-{}'.format(
+    exp_prefix = 'dev-new-env-{}'.format(
         __file__.replace('/', '-').replace('_', '-').split('.')[0]
     )
-
-    n_seeds = 3
-    mode = 'ec2'
-    exp_prefix = 'rlkit-skew-fit-pusher-reference-sample-from-true-prior-take2'
 
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
         for _ in range(n_seeds):
@@ -150,12 +147,4 @@ if __name__ == "__main__":
                 variant=variant,
                 use_gpu=True,
                 num_exps_per_instance=3,
-                gcp_kwargs=dict(
-                    terminate=True,
-                    zone='us-east1-c',
-                    gpu_kwargs=dict(
-                        gpu_model='nvidia-tesla-k80',
-                        num_gpu=1,
-                    )
-                )
           )
