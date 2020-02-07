@@ -1,0 +1,127 @@
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+from rlkit.core import logger
+from rlkit.samplers.rollout_functions import multitask_rollout_sim2real
+from rlkit.torch import pytorch_util as ptu
+from rlkit.envs.vae_wrapper import VAEWrappedEnv
+import torch
+
+import gym
+import multiworld
+from multiworld.core.image_env import ImageEnv
+multiworld.register_all_envs()
+
+
+def wrap_real_env_manually(data_ckpt=None, env_name='SawyerPushXYReal-v0'):
+    """
+    Return VAE env wrapping real_world env
+    :param data_ckpt:
+    :param env_name:
+    :return:
+    """
+    env = gym.make(env_name)
+    image_env = ImageEnv(env,
+                         imsize=data_ckpt['evaluation/env'].imsize,
+                         normalize=True,
+                         transpose=True)
+    # TUNG: ====== Hard code: clone from configuration of data_ckpt['evaluation/env']
+    render = False
+    reward_params = dict(
+                type='latent_distance',
+            )
+    # ======
+
+    vae_env = VAEWrappedEnv(
+        image_env,
+        data_ckpt['vae'],
+        imsize=image_env.imsize,
+        decode_goals=render,
+        render_goals=render,
+        render_rollouts=render,
+        reward_params=reward_params,
+    )
+    env = vae_env
+    return env
+
+
+def simulate_policy_on_real(args, adapted_vae_ckpt='None'):
+    if args.gpu:
+        data = torch.load(open(args.file, "rb"))
+    else:
+        data = torch.load(open(args.file, "rb"), map_location='cpu')
+    env = data['evaluation/env']
+    policy = data['evaluation/policy']
+
+    print("Policy and environment loaded")
+    if args.gpu:
+        ptu.set_gpu_mode(True)
+    if isinstance(env, VAEWrappedEnv) and hasattr(env, 'mode'):
+        env.mode(args.mode)
+    if args.enable_render or hasattr(env, 'enable_render'):
+        # some environments need to be reconfigured for visualization
+        env.enable_render()
+
+    # TUNG: Using a goal sampled from environment
+    env._goal_sampling_mode = 'reset_of_env'
+
+    # Re-initialize REAL env wrapped by learned VAE (from SIM)
+    env_manual = wrap_real_env_manually(data_ckpt=data, env_name='SawyerPushXYReal-v0')
+    if args.gpu:
+        ptu.set_gpu_mode(True)
+    if isinstance(env_manual, VAEWrappedEnv) and hasattr(env_manual, 'mode'):
+        env_manual.mode(args.mode)
+    if args.enable_render or hasattr(env_manual, 'enable_render'):
+        # some environments need to be reconfigured for visualization
+        env_manual.enable_render()
+
+    # Disable re-compute reward since REAL env doesn't provide it
+    env_manual.wrapped_env.recompute_reward = False
+
+    # Load adapted VAE
+    if adapted_vae_ckpt is not None:
+        adapted_vae = torch.load(os.path.join(adapted_vae_ckpt, 'ckpt.pth'))
+        env_manual.vae.load_state_dict(adapted_vae)
+
+    # TUNG: This piece of code for test random rollout REAL env wrapped by VAE
+    # env_manual.reset()
+    # for _ in range(100):
+    #     print('Random action')
+    #     act = env_manual.action_space.sample()
+    #     env_manual.step(act)
+
+    # This piece of code for test learn policy on REAL env
+    paths = []
+    for _ in range(args.n_test):
+        paths.append(multitask_rollout_sim2real(
+            env_manual,
+            policy,
+            max_path_length=args.H,
+            render=not args.hide,
+            observation_key='observation',
+            desired_goal_key='desired_goal',
+        ))
+        if hasattr(env_manual, "log_diagnostics"):
+            env_manual.log_diagnostics(paths)
+        if hasattr(env_manual, "get_diagnostics"):
+            for k, v in env_manual.get_diagnostics(paths).items():
+                logger.record_tabular(k, v)
+        logger.dump_tabular()
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('file', type=str, help='path to the snapshot file')
+parser.add_argument('--H', type=int, default=50, help='Max length of rollout')
+parser.add_argument('--speedup', type=float, default=10, help='Speedup')
+parser.add_argument('--mode', default='video_env', type=str, help='env mode')
+parser.add_argument('--gpu', action='store_true')
+parser.add_argument('--enable_render', action='store_true')
+parser.add_argument('--hide', action='store_false')
+parser.add_argument('--n_test', type=int, default=100)
+args_user = parser.parse_args()
+
+
+if __name__ == "__main__":
+    simulate_policy_on_real(args_user)
