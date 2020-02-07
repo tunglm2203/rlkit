@@ -194,7 +194,7 @@ def generate_vae_dataset(variant):
             save_file_prefix = env_id
         if save_file_prefix is None:
             save_file_prefix = env_class.__name__
-        filename = "./data/{}_N{}_{}_imsize{}_random_oracle_split_{}{}.npy".format(
+        filename = "/tmp/{}_N{}_{}_imsize{}_random_oracle_split_{}{}.npy".format(
             save_file_prefix,
             str(N),
             init_camera.__name__ if init_camera else '',
@@ -453,6 +453,9 @@ def skewfit_experiment(variant):
 
     skewfit_preprocess_variant(variant)
     env = get_envs(variant)
+
+    # TUNG: Disable recompute reward in real world
+    env.wrapped_env.recompute_reward = False
 
     uniform_dataset_fn = variant.get('generate_uniform_dataset_fn', None)
     if uniform_dataset_fn:
