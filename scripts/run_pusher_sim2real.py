@@ -47,7 +47,8 @@ def wrap_real_env_manually(data_ckpt=None, env_name='SawyerPushXYReal-v0'):
     return env
 
 
-def simulate_policy_on_real(args, adapted_vae_ckpt='None'):
+def simulate_policy_on_real(args):
+    adapted_vae_ckpt = args.vae
     if args.gpu:
         data = torch.load(open(args.file, "rb"))
     else:
@@ -82,8 +83,10 @@ def simulate_policy_on_real(args, adapted_vae_ckpt='None'):
 
     # Load adapted VAE
     if adapted_vae_ckpt is not None:
-        adapted_vae = torch.load(os.path.join(adapted_vae_ckpt, 'ckpt.pth'))
-        env_manual.vae.load_state_dict(adapted_vae)
+        adapted_vae = torch.load(open(os.path.join(adapted_vae_ckpt, 'ckpt.pth'), "rb"))
+        env_manual.vae.load_state_dict(adapted_vae['model'])
+    else:
+        print('[WARNING] Using VAE of source')
 
     # TUNG: This piece of code for test random rollout REAL env wrapped by VAE
     # env_manual.reset()
@@ -113,6 +116,7 @@ def simulate_policy_on_real(args, adapted_vae_ckpt='None'):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='path to the snapshot file')
+parser.add_argument('--vae', type=str, default=None)
 parser.add_argument('--H', type=int, default=50, help='Max length of rollout')
 parser.add_argument('--speedup', type=float, default=10, help='Speedup')
 parser.add_argument('--mode', default='video_env', type=str, help='env mode')
