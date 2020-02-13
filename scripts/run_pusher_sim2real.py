@@ -83,7 +83,7 @@ def simulate_policy_on_real(args):
 
     # Load adapted VAE
     if adapted_vae_ckpt is not None:
-        adapted_vae = torch.load(open(os.path.join(adapted_vae_ckpt, 'ckpt.pth'), "rb"))
+        adapted_vae = torch.load(open(os.path.join(adapted_vae_ckpt, 'vae_ckpt.pth'), "rb"))
         env_manual.vae.load_state_dict(adapted_vae['model'])
     else:
         print('[WARNING] Using VAE of source')
@@ -128,4 +128,9 @@ args_user = parser.parse_args()
 
 
 if __name__ == "__main__":
+    """
+    Need to provide 2 parameters in list below:
+        file: Path to trained policy (e.g.: /path/to/params.pkl)
+        vae: Path to trained adapted VAE (e.g.: /path/to/vae_file, contains vae_ckpt.pth) 
+    """
     simulate_policy_on_real(args_user)
