@@ -21,8 +21,11 @@ def check_successful_go_to_pos_xy(env, pos, thres):
 
 
 def set_obj_location(obj_pos, env):
-    args = dict(x=obj_pos[0] + 0.05,
-                y=obj_pos[1] - 0.05,
+    # args = dict(x=obj_pos[0] + 0.05,
+    #             y=obj_pos[1] - 0.05,
+    #             z=obj_pos[2])
+    args = dict(x=obj_pos[0],
+                y=obj_pos[1],
                 z=obj_pos[2])
     msg = dict(func='set_object_los', args=args)
     env.client.sending(msg, sleep_before=env.config.SLEEP_BEFORE_SENDING_CMD_SOCKET,
@@ -42,142 +45,114 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
-# USER constant scope
-n_points_ee = 5     # Resolution workspace for checking, higher is more accurately checking
-n_points_obj = 5    # Resolution workspace for checking, higher is more accurately checking
-thresh = 0.05       # Threshold to verify robot reach to correct position or not
-imsize = 48
+def compute_checking_coor(env, _n_points_ee_x, _n_points_ee_y, _n_points_obj_x, _n_points_obj_y):
+    min_x_r, max_x_r = env.goal_space.low[2], env.goal_space.high[2]
+    min_y_r, max_y_r = env.goal_space.low[3], env.goal_space.high[3]
 
-success = bcolors.OKGREEN + 'Success' + bcolors.ENDC
-failed = bcolors.FAIL + 'Failed' + bcolors.ENDC
+    puck_min_x_r, puck_max_x_r = env.goal_space.low[0], env.goal_space.high[0]
+    puck_min_y_r, puck_max_y_r = env.goal_space.low[1], env.goal_space.high[1]
 
-# TUNG: Simulation
-# env_sim = gym.make('SawyerPushNIPSEasy-v0')
-# env_sim = ImageEnv(env_sim,
-#                    normalize=True,
-#                    transpose=True,
-#                    init_camera=sawyer_init_camera_zoomed_in_aim_v0)
-# env_sim.reset()
-#
-# min_x, max_x = env_sim.hand_goal_low[0], env_sim.hand_goal_high[0]
-# min_y, max_y = env_sim.hand_goal_low[1], env_sim.hand_goal_high[1]
-#
-# puck_min_x, puck_max_x = env_sim.puck_goal_low[0], env_sim.puck_goal_high[0]
-# puck_min_y, puck_max_y = env_sim.puck_goal_low[1], env_sim.puck_goal_high[1]
-#
-# x_coors = np.linspace(min_x, max_x, n_points_ee)
-# y_coors = np.linspace(min_y, max_y, n_points_ee)
-#
-# puck_x_coors = np.linspace(puck_min_x, puck_max_x, n_points_obj)
-# puck_y_coors = np.linspace(puck_min_y, puck_max_y, n_points_obj)
+    x_coors = np.linspace(min_x_r, max_x_r, _n_points_ee_x, endpoint=True)
+    y_coors = np.linspace(min_y_r, max_y_r, _n_points_ee_y, endpoint=True)
 
-# for pxi in range(len(puck_x_coors)):
-#     for pyi in range(len(puck_y_coors)):
-#         for xi in range(len(x_coors)):
-#             if xi % 2 == 0:
-#                 flip = False
-#             else:
-#                 flip = True
-#             for yi in range(len(y_coors)):
-#                 env_sim._goal_xyxy = np.zeros(4)
-#                 if not flip:
-#                     env_sim._goal_xyxy[:2] = np.array([x_coors[xi], y_coors[yi]])  # EE
-#                 else:
-#                     env_sim._goal_xyxy[:2] = np.array([x_coors[xi], y_coors[len(y_coors) - yi - 1]])  # EE
-#
-#                 env_sim._goal_xyxy[2:] = np.array([puck_x_coors[pxi], puck_y_coors[pyi]])   # OBJ
-#                 env_sim.set_goal_xyxy(env_sim._goal_xyxy)
-#                 # env_sim.set_puck_xy(env_sim.sample_puck_xy())
-#                 env_sim.reset_mocap_welds()
-#                 env_sim._get_obs()
-#
-#                 env_state = env_sim.wrapped_env.get_env_state()
-#                 env_sim.wrapped_env.set_to_goal(env_sim.wrapped_env.get_goal())
-#                 img_goal = env_sim._get_flat_img()
-#                 env_sim.wrapped_env.set_env_state(env_state)
-#                 g = img_goal
-#
-#                 im = cv2.resize(g.reshape(3, 84, 84).transpose(), (128, 128))
-#                 cv2.imshow('goal', im)
-#                 cv2.waitKey(1)
-# print('x_coors: ', x_coors)
-# print('y_coors: ', y_coors)
-# print('puck_x_coors: ', puck_x_coors)
-# print('puck_y_coors: ', puck_y_coors)
+    puck_x_coors = np.linspace(puck_min_x_r, puck_max_x_r, _n_points_obj_x)
+    puck_y_coors = np.linspace(puck_min_y_r, puck_max_y_r, _n_points_obj_y)
 
-# TUNG: Real
-env_real = gym.make('SawyerPushXYReal-v0')
-env_real = ImageEnv(env_real,
-                    imsize=imsize,
-                    normalize=True,
-                    transpose=True)
-# env_real.reset()
+    print('x_coors: ', x_coors)
+    print('y_coors: ', y_coors)
+    print('puck_x_coors: ', puck_x_coors)
+    print('puck_y_coors: ', puck_y_coors)
+    return x_coors, y_coors, puck_x_coors, puck_y_coors
 
-min_x_r, max_x_r = env_real.goal_space.low[2], env_real.goal_space.high[2]
-min_y_r, max_y_r = env_real.goal_space.low[3], env_real.goal_space.high[3]
 
-puck_min_x_r, puck_max_x_r = env_real.goal_space.low[0], env_real.goal_space.high[0]
-puck_min_y_r, puck_max_y_r = env_real.goal_space.low[1], env_real.goal_space.high[1]
+def main():
+    # USER constant scope
+    n_points_ee_x = 5     # Resolution workspace for checking, higher is more accurately checking
+    n_points_ee_y = 5     # Resolution workspace for checking, higher is more accurately checking
+    n_points_obj_x = 5    # Resolution workspace for checking, higher is more accurately checking
+    n_points_obj_y = 5    # Resolution workspace for checking, higher is more accurately checking
+    thresh = 0.05       # Threshold to verify robot reach to correct position or not
+    imsize = 48
+    z_coor = 0.11
 
-x_coors_r = np.linspace(min_x_r, max_x_r, n_points_ee, endpoint=True)
-y_coors_r = np.linspace(min_y_r, max_y_r, n_points_ee, endpoint=True)
+    success = bcolors.OKGREEN + 'Success' + bcolors.ENDC
+    failed = bcolors.FAIL + 'Failed' + bcolors.ENDC
 
-puck_x_coors_r = np.linspace(puck_min_x_r, puck_max_x_r, n_points_obj)
-puck_y_coors_r = np.linspace(puck_min_y_r, puck_max_y_r, n_points_obj)
+    # TUNG: Real
+    env_real = gym.make('SawyerPushXYReal-v0')
+    env_real = ImageEnv(env_real,
+                        imsize=imsize,
+                        normalize=True,
+                        transpose=True)
 
-print('x_coors: ', x_coors_r)
-print('y_coors: ', y_coors_r)
-print('puck_x_coors: ', puck_x_coors_r)
-print('puck_y_coors: ', puck_y_coors_r)
+    x_coors_r, y_coors_r, puck_x_coors_r, puck_y_coors_r = compute_checking_coor(env_real,
+                                                                                 n_points_ee_x,
+                                                                                 n_points_ee_y,
+                                                                                 n_points_obj_x,
+                                                                                 n_points_obj_y)
+    pxis = []
+    pyis = []
+    xis = []
+    yis = []
+    cnt = 0
 
-for pxi in range(len(puck_x_coors_r)):
-    for pyi in range(len(puck_y_coors_r)):
-        for xi in range(len(x_coors_r)):
-            if xi == pxi or xi == pxi - 1 or xi == pxi + 1:
-                print('Avoid puck pxi={}, xi={}'.format(pxi, xi))
-                continue
-            if xi % 2 == 0:
-                flip = False
-            else:
-                flip = True
-            for yi in range(len(y_coors_r)):
-                if not flip:
-                    ee_pos = np.array([x_coors_r[xi], y_coors_r[yi], .07])
+    for pxi in range(0, len(puck_x_coors_r)):
+        for pyi in range(1, len(puck_y_coors_r)):
+            for xi in range(len(x_coors_r)):
+                # if xi == pxi or xi == pxi - 1 or xi == pxi + 1:
+                #     print('Avoid puck pxi={}, xi={}'.format(pxi, xi))
+                #     continue
+                if xi % 2 == 0:
+                    flip = False
                 else:
-                    ee_pos = np.array([x_coors_r[xi], y_coors_r[len(y_coors_r) - yi - 1], .07])
+                    flip = True
+                for yi in range(len(y_coors_r)):
+                    print('[INFO] pxi={}, pyi={}, xi={}, yi={}'.format(pxi, pyi, xi, yi))
+                    if not flip:
+                        ee_pos = np.array([x_coors_r[xi], y_coors_r[yi], z_coor])
+                    else:
+                        ee_pos = np.array([x_coors_r[xi], y_coors_r[len(y_coors_r) - yi - 1], z_coor])
 
-                angles = env_real.request_ik_angles(ee_pos, env_real._get_joint_angles())
-                env_real.send_angle_action(angles, ee_pos)
-                time.sleep(2)
-                if check_successful_go_to_pos_xy(env_real, ee_pos, thresh):
-                    print("Moving to (x, y) = (%.4f, %.4f): %s" % (ee_pos[0], ee_pos[1], success))
-                else:
-                    print("Moving to (x, y) = (%.4f, %.4f): %s" % (ee_pos[0], ee_pos[1], failed))
+                    angles = env_real.request_ik_angles(ee_pos, env_real._get_joint_angles())
+                    env_real.send_angle_action(angles, ee_pos)
+                    time.sleep(3)
+                    if check_successful_go_to_pos_xy(env_real, ee_pos, thresh):
+                        print("Moving to (x, y) = (%.4f, %.4f): %s" % (ee_pos[0], ee_pos[1], success))
+                    else:
+                        print("Moving to (x, y) = (%.4f, %.4f): %s" % (ee_pos[0], ee_pos[1], failed))
 
-                obj_pos = np.array([puck_x_coors_r[pxi], puck_y_coors_r[pyi],
-                                    env_real.pos_object_reset_position[2]])
-                # if pxi == 1 and pyi == 0 and xi == 3 and yi == 4:
-                set_obj_location(obj_pos, env_real)
+                    obj_pos = np.array([puck_x_coors_r[pxi], puck_y_coors_r[pyi],
+                                        env_real.pos_object_reset_position[2]])
+                    # if pxi == pxis[cnt] and pyi == pyis[cnt] and xi == xis[cnt] and yi == yis[cnt]:
+                    set_obj_location(obj_pos, env_real)
+                    time.sleep(2)   # Sleep to place object
 
-                img = env_real._get_flat_img()
-                g = img
+                    img = env_real._get_flat_img()
+                    g = img
 
-                im_show = cv2.resize(g.reshape(3, imsize, imsize).transpose()[:, :, ::-1], (128, 128))
-                cv2.imshow('goal', im_show)
-                cv2.waitKey(1)
-                filename = '/home/tung/workspace/rlkit/tester/images_real/im_{}_{}_{}_{}'.\
-                    format(pxi, pyi, xi, yi)
-                # if pxi == 1 and pyi == 0 and xi == 3 and yi == 4:
-                #     print('=========Saving++++++++')
-                cv2.imwrite(filename + '.png', unormalize_image(im_show))
-                np.savez_compressed(filename + '.npy', im=img)
-        print('Finish one location of object')
-        time.sleep(3)
+                    im_show = cv2.resize(g.reshape(3, imsize, imsize).transpose()[:, :, ::-1], (128, 128))
+                    cv2.imshow('goal', im_show)
+                    cv2.waitKey(1)
+                    filename = '/home/tung/workspace/rlkit/tester/images_real/im_{}_{}_{}_{}'.\
+                        format(pxi, pyi, xi, yi)
+                    # if pxi == pxis[cnt] and pyi == pyis[cnt] and xi == xis[cnt] and yi == yis[cnt]:
+                    #     print('=========Saving=========: {}, {}, {}, {}'.format(pxi, pyi, xi, yi))
+                    #     cnt += 1
+                    #     if cnt == len(pxis):
+                    #         exit()
+                    cv2.imwrite(filename + '.png', unormalize_image(im_show))
+                    np.savez_compressed(filename + '.npy', im=img)
+            print('Finish one location of object')
+            time.sleep(2)
 
-# print('Position action scale: ', env1.position_action_scale)
-# print('Obs space (low): ', env1.config.POSITION_SAFETY_BOX_LOWS)
-# print('Obs space (high): ', env1.config.POSITION_SAFETY_BOX_HIGHS)
-# print('Goal space (low): ', env1.observation_space['desired_goal'].low)
-# print('Goal space (high): ', env1.observation_space['desired_goal'].high)
-# print('Action space (low): ', env1.action_space.low)
-# print('Action space (high): ', env1.action_space.high)
+    # print('Position action scale: ', env1.position_action_scale)
+    # print('Obs space (low): ', env1.config.POSITION_SAFETY_BOX_LOWS)
+    # print('Obs space (high): ', env1.config.POSITION_SAFETY_BOX_HIGHS)
+    # print('Goal space (low): ', env1.observation_space['desired_goal'].low)
+    # print('Goal space (high): ', env1.observation_space['desired_goal'].high)
+    # print('Action space (low): ', env1.action_space.low)
+    # print('Action space (high): ', env1.action_space.high)
+
+
+if __name__ == '__main__':
+    main()
