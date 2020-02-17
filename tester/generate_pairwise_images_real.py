@@ -96,8 +96,8 @@ def main():
     yis = []
     cnt = 0
 
-    for pxi in range(0, len(puck_x_coors_r)):
-        for pyi in range(1, len(puck_y_coors_r)):
+    for pxi in range(len(puck_x_coors_r)):
+        for pyi in range(len(puck_y_coors_r)):
             for xi in range(len(x_coors_r)):
                 # if xi == pxi or xi == pxi - 1 or xi == pxi + 1:
                 #     print('Avoid puck pxi={}, xi={}'.format(pxi, xi))
