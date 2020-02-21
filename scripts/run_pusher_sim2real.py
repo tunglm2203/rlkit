@@ -80,6 +80,7 @@ def simulate_policy_on_real(args):
 
     # Disable re-compute reward since REAL env doesn't provide it
     env_manual.wrapped_env.recompute_reward = False
+    env_manual.wrapped_env.wrapped_env.use_gazebo_auto = True
 
     # Load adapted VAE
     if adapted_vae_ckpt is not None:
