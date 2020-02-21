@@ -144,7 +144,7 @@ if __name__ == "__main__":
     n_seeds = 1
     mode = 'local'
     exp_prefix = 'dev-{}'.format(
-        __file__.replace('/', '-').replace('_', '-').split('.')[0] + '-SawyerPickupEnvYZ-v0'
+        __file__.replace('/', '-').replace('_', '-').split('.')[0] + '-' + variant['env_id']
     )
 
     # n_seeds = 3

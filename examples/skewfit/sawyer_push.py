@@ -14,7 +14,8 @@ if __name__ == "__main__":
         online_vae_exploration=False,
         imsize=48,
         init_camera=sawyer_init_camera_zoomed_in_aim_v0,
-        env_id='SawyerPushNIPSEasy-v0',
+        # env_id='SawyerPushNIPSEasy-v0',
+        env_id='SawyerPushNIPS-v0',
         skewfit_variant=dict(
             save_video=True,
             custom_goal_sampler='replay_buffer',
@@ -135,7 +136,7 @@ if __name__ == "__main__":
     n_seeds = 1
     mode = 'local'
     exp_prefix = 'dev-new-env-{}'.format(
-        __file__.replace('/', '-').replace('_', '-').split('.')[0]
+        __file__.replace('/', '-').replace('_', '-').split('.')[0] + '-' + variant['env_id']
     )
 
     for exp_id, variant in enumerate(sweeper.iterate_hyperparameters()):
