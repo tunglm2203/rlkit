@@ -2,6 +2,7 @@ import argparse
 from collections import OrderedDict
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
+import json
 
 import torch
 import torch.nn.functional as F
@@ -13,6 +14,7 @@ from rlkit.torch import pytorch_util as ptu
 from rlkit.torch.vae.conv_vae import imsize48_default_architecture
 from rlkit.pythonplusplus import identity
 from rlkit.core.eval_util import create_stats_ordered_dict
+from rlkit.core.logging import MyEncoder
 from rlkit.core import logger
 from rlkit.sim2real.sim2real_utils import *
 from rlkit.sim2real.discriminator import *
@@ -44,6 +46,15 @@ def finish_epoch():
     pass
 
 
+def setup_logger(args, variant):
+    ckpt_path = setup_logger_path(args=args, path=variant['default_path'])
+    tensor_board = SummaryWriter(ckpt_path)
+    with open(os.path.join(ckpt_path, 'log_params.json'), "w") as f:
+        json.dump(variant, f, indent=2, sort_keys=True, cls=MyEncoder)
+
+    return tensor_board, ckpt_path
+
+
 def main(args):
     # Config for running-time
     if args.gpu:
@@ -52,43 +63,52 @@ def main(args):
     ##########################
     # User defined parameter #
     ##########################
-    path_to_data = '/mnt/hdd/tung/workspace/rlkit/tester'   # Must have 'images_sim' & 'images_real'
-    vae_kwargs = dict(
-        input_channels=3,
-        architecture=imsize48_default_architecture,
-        decoder_distribution='gaussian_identity_variance',
+    variant = dict(
+        # Must have 'images_sim' & 'images_real'
+        path_to_data='/mnt/hdd/tung/workspace/rlkit/tester',
+        vae_kwargs=dict(
+            input_channels=3,
+            architecture=imsize48_default_architecture,
+            decoder_distribution='gaussian_identity_variance',
+        ),
+        # decoder_activation=identity,
+        representation_size=4,
+        d_hidden_dims=4,
+        d_output_dims=2,
+        n_epochs=2000,
+        # step1=5000,  # Step to decay learning rate
+        # step2=5000,
+        batch_size=50,
+        g_lr=1e-4,
+        d_lr=1e-4,
+        # alpha=2.0,
+        # default_path = '/mnt/hdd/tung/workspace/rlkit/data/vae_adapt',
+        default_path='/mnt/hdd/tung/workspace/rlkit/data/gan_adapt',
     )
-    decoder_activation = identity
-    representation_size = 4
-    d_hidden_dims = 3
-    d_output_dims = 2
-    n_epochs = 1000
-    step1, step2 = 5000, 5000   # Step to decay learning rate
-    batch_size = 64
-    beta = 10
-    lr = 1e-3
-    alpha = 2.0
-    # default_path = '/mnt/hdd/tung/workspace/rlkit/data/vae_adapt'
-    default_path = '/mnt/hdd/tung/workspace/rlkit/data/gan_adapt'
 
     ##########################
     #       Load data        #
     ##########################
     rand_src_train, rand_tgt_train, rand_src_eval, rand_tgt_eval, \
-    pair_src_train, pair_src_eval, pair_tgt_train, pair_tgt_eval = load_all_required_data(path_to_data)
-    print('Number of random data: Sim={}, Real={}'.format(len(rand_src_train), len(rand_tgt_train)))
-    print('Number of pair data: Sim={}, Real={}'.format(len(pair_src_train), len(pair_tgt_train)))
+    pair_src_train, pair_src_eval, pair_tgt_train, pair_tgt_eval = \
+        load_all_required_data(variant['path_to_data'])
+    print('No. of random train data: Sim={}, Real={}'.format(len(rand_src_train), len(rand_tgt_train)))
+    print('No. of pair train data: Sim={}, Real={}'.format(len(pair_src_train), len(pair_tgt_train)))
 
     ##########################
     #       Load models      #
     ##########################
     policy_ckpt = torch.load(open(args.file, "rb"))
     env = policy_ckpt['evaluation/env']
-
     src_vae = env.vae
-    # tgt_vae = create_target_encoder(vae_kwargs, representation_size, decoder_activation)
-    tgt_vae = Encoder(representation_size)
-    critic = Discriminator(representation_size, d_hidden_dims, d_output_dims)
+
+    tgt_vae = Encoder(variant['representation_size'])
+    critic = Discriminator(variant['representation_size'],
+                           variant['d_hidden_dims'],
+                           variant['d_output_dims'])
+    # Init target encoder with source encoder
+    tgt_vae.encoder.load_state_dict(src_vae.encoder.state_dict())
+    tgt_vae.fc1.load_state_dict(src_vae.fc1.state_dict())
 
     src_vae.to(ptu.device)
     tgt_vae.to(ptu.device)
@@ -99,34 +119,31 @@ def main(args):
 
     # Setup criterion and optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer_tgt = optim.Adam(tgt_vae.encoder.parameters(), lr=lr, weight_decay=0,)
-    optimizer_cri = optim.Adam(critic.parameters(), lr=lr, weight_decay=0,)
+    optimizer_tgt = optim.Adam(tgt_vae.parameters(), lr=variant['g_lr'], betas=(0.5, 0.9))
+    optimizer_cri = optim.Adam(critic.parameters(), lr=variant['d_lr'], betas=(0.5, 0.9))
     model_lr_scheduler = None
     # model_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=step1, gamma=0.5)
     # model_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_tgt, milestones=[step1, step2], gamma=0.5)
 
     # Logger
-    ckpt_path = setup_logger_path(args=args, path=default_path)
-    tensor_board = SummaryWriter(ckpt_path)
-    logger.set_snapshot_dir(ckpt_path)
-    logger.add_tabular_output('vae_progress.csv', relative_to_snapshot_dir=True)
+    tensor_board, ckpt_path = setup_logger(args, variant)
 
-    n_batchs = len(rand_src_train) // batch_size
+    n_batchs = len(rand_src_train) // variant['batch_size']
     n_train_data = len(rand_src_train)
 
-    # ===== Phase 1: Training for domain adaptation
-    for epoch in tqdm(range(n_epochs)):
-        (losses_tgt, losses_cri, acces), idxes = \
-            start_epoch(n_train_data, model_lr_scheduler)
+    # Training for domain adaptation
+    for epoch in tqdm(range(variant['n_epochs'])):
+        (losses_tgt, losses_cri, acces), idxes = start_epoch(n_train_data, model_lr_scheduler)
         # ======= Train for each epoch
         tgt_vae.train()
         critic.train()
+        debug_pred_cri = []
         for b in range(n_batchs):
             ###########################
             #   Train discriminator   #
             ###########################
-            images_src = get_batch(rand_src_train, b, idxes, batch_size)
-            images_tgt = get_batch(rand_tgt_train, b, idxes, batch_size)
+            images_src = get_batch(rand_src_train, b, idxes, variant['batch_size'])
+            images_tgt = get_batch(rand_tgt_train, b, idxes, variant['batch_size'])
 
             # zero gradients for optimizer
             optimizer_cri.zero_grad()
@@ -147,11 +164,10 @@ def main(args):
             # compute loss for critic
             loss_critic = criterion(pred_concat, label_concat)
             loss_critic.backward()
-
-            # optimize critic
             optimizer_cri.step()
 
             pred_cls = torch.squeeze(pred_concat.max(1)[1])
+            debug_pred_cri.append(pred_cls.cpu().numpy())
             acc = (pred_cls == label_concat).float().mean()
 
             ############################
@@ -174,12 +190,10 @@ def main(args):
             # compute loss for target encoder
             loss_tgt = criterion(pred_tgt, label_tgt)
             loss_tgt.backward()
-
-            # optimize target encoder
             optimizer_tgt.step()
 
-            losses_tgt.append(loss_critic.item())
-            losses_cri.append(loss_tgt.item())
+            losses_tgt.append(loss_tgt.item())
+            losses_cri.append(loss_critic.item())
             acces.append(acc.item())
 
         # ======= Test for each epoch
@@ -196,7 +210,6 @@ def main(args):
 parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='path to the snapshot file')
 parser.add_argument('--vae', type=str, default=None, help='path save checkpoint')
-parser.add_argument('--checkpoint', type=str, help='path save checkpoint')
 parser.add_argument('--exp', type=str, default=None, help='Another description for experiment name')
 parser.add_argument('--gpu', action='store_false')
 args_user = parser.parse_args()
