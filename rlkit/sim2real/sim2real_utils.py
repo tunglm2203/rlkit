@@ -16,11 +16,14 @@ def create_target_encoder(vae_kwargs, representation_size, decoder_activation):
     return conv_vae
 
 
-def load_all_required_data(path='', file_format='*.npz', test_ratio=0.1, seed=0):
-    rand_data_sim = load_data(os.path.join(path, 'random_images_sim.new'), file_format)
-    rand_data_real = load_data(os.path.join(path, 'random_images_real.new'), file_format)
-    pair_data_sim = load_data(os.path.join(path, 'images_sim'), file_format)
-    pair_data_real = load_data(os.path.join(path, 'images_real'), file_format)
+def load_all_required_data(path='', rand_src_dir=None, rand_tgt_dir=None,
+                           pair_src_dir=None, pair_tgt_dir=None,
+                           file_format='*.npz',
+                           test_ratio=0.1, seed=0):
+    rand_data_sim = load_data(os.path.join(path, rand_src_dir), file_format)
+    rand_data_real = load_data(os.path.join(path, rand_tgt_dir), file_format)
+    pair_data_sim = load_data(os.path.join(path, pair_src_dir), file_format)
+    pair_data_real = load_data(os.path.join(path, pair_tgt_dir), file_format)
     assert len(rand_data_sim) == len(rand_data_real), \
         "[ERROR] Number of random sim & real data not equal"
     assert len(pair_data_sim) == len(pair_data_real), \
