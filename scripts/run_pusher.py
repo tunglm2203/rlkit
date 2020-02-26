@@ -1,5 +1,6 @@
 import argparse
 import numpy as np
+import os
 import matplotlib.pyplot as plt
 
 from rlkit.core import logger
@@ -51,21 +52,13 @@ def simulate_policy(args):
     puck_distance = np.array(puck_distance)
     hand_distance = np.array(hand_distance)
 
-    np.savez_compressed('learned_policy_new_env.npz',
+    if args.exp is not None:
+        filename = os.path.join('debug', 'test_policy_' + args.exp + '.npz')
+    else:
+        filename = os.path.join('debug', 'test_policy_sim.npz')
+    np.savez_compressed(filename,
                         puck_distance=puck_distance,
                         hand_distance=hand_distance)
-
-    # np.savez_compressed('learned_policy_new_background.npz',
-    #                     puck_distance=puck_distance,
-    #                     hand_distance=hand_distance)
-
-    # plt.figure()
-    # plt.plot(puck_distance)
-    # plt.title('puck_distance')
-    # plt.figure()
-    # plt.plot(hand_distance)
-    # plt.title('hand_distance')
-    # plt.show()
 
 
 if __name__ == "__main__":
@@ -83,6 +76,7 @@ if __name__ == "__main__":
     parser.add_argument('--enable_render', action='store_true')
     parser.add_argument('--hide', action='store_true')
     parser.add_argument('--n_test', type=int, default=100)
+    parser.add_argument('--exp', type=str, default=None)
     args = parser.parse_args()
 
     simulate_policy(args)
