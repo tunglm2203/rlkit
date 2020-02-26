@@ -12,6 +12,7 @@ def multitask_rollout_sim2real(
         get_action_kwargs=None,
         return_dict_obs=False,
         random_policy=False,
+        adapt=False,
 ):
     if render_kwargs is None:
         render_kwargs = {}
@@ -40,8 +41,11 @@ def multitask_rollout_sim2real(
         a, agent_info = agent.get_action(new_obs, **get_action_kwargs)
         if env.wrapped_env.wrapped_env.__class__.__name__ == 'SawyerPushXYEnv':
             _a = np.zeros(env.wrapped_env.wrapped_env.action_space.shape[0])
-            _a[:2] = a
-            _a[2] = env.wrapped_env.wrapped_env.config.POSITION_SAFETY_BOX_LOWS[2]
+            if adapt:
+                _a[:2] = a
+                _a[2] = env.wrapped_env.wrapped_env.config.POSITION_SAFETY_BOX_LOWS[2]
+            else:
+                _a = a
             print('[DEBUG] Action: ', a)
             if random_policy:
                 next_o, r, d, env_info = env.step(env.action_space.sample())

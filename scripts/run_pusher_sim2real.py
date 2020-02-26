@@ -99,6 +99,7 @@ def simulate_policy_on_real(args):
             render=not args.hide,
             observation_key='observation',
             desired_goal_key='desired_goal',
+            adapt=args.no_adapt
         ))
         if hasattr(env_manual, "log_diagnostics"):
             env_manual.log_diagnostics(paths)
@@ -136,6 +137,7 @@ parser.add_argument('--hide', action='store_false')
 parser.add_argument('--n_test', type=int, default=100)
 parser.add_argument('--exp', type=str, default=None)
 parser.add_argument('--random', action='store_true')
+parser.add_argument('--no_adapt', action='store_false')
 args_user = parser.parse_args()
 
 
