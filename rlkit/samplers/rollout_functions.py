@@ -11,6 +11,7 @@ def multitask_rollout_sim2real(
         desired_goal_key=None,
         get_action_kwargs=None,
         return_dict_obs=False,
+        random_policy=False,
 ):
     if render_kwargs is None:
         render_kwargs = {}
@@ -42,9 +43,15 @@ def multitask_rollout_sim2real(
             _a[:2] = a
             _a[2] = env.wrapped_env.wrapped_env.config.POSITION_SAFETY_BOX_LOWS[2]
             print('[DEBUG] Action: ', a)
-            next_o, r, d, env_info = env.step(_a)
+            if random_policy:
+                next_o, r, d, env_info = env.step(env.action_space.sample())
+            else:
+                next_o, r, d, env_info = env.step(_a)
         else:
-            next_o, r, d, env_info = env.step(a)
+            if random_policy:
+                next_o, r, d, env_info = env.step(env.action_space.sample())
+            else:
+                next_o, r, d, env_info = env.step(a)
 
         if render:
             env.render(**render_kwargs)

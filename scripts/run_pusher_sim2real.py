@@ -30,8 +30,8 @@ def wrap_real_env_manually(data_ckpt=None, env_name='SawyerPushXYReal-v0'):
     # TUNG: ====== Hard code: clone from configuration of data_ckpt['evaluation/env']
     render = False
     reward_params = dict(
-                type='latent_distance',
-            )
+        type='latent_distance',
+    )
     # ======
 
     vae_env = VAEWrappedEnv(
@@ -47,7 +47,8 @@ def wrap_real_env_manually(data_ckpt=None, env_name='SawyerPushXYReal-v0'):
     return env
 
 
-def simulate_policy_on_real(args, adapted_vae_ckpt='None'):
+def simulate_policy_on_real(args):
+    adapted_vae_ckpt = args.vae
     if args.gpu:
         data = torch.load(open(args.file, "rb"))
     else:
@@ -79,18 +80,14 @@ def simulate_policy_on_real(args, adapted_vae_ckpt='None'):
 
     # Disable re-compute reward since REAL env doesn't provide it
     env_manual.wrapped_env.recompute_reward = False
+    env_manual.wrapped_env.wrapped_env.use_gazebo_auto = True
 
     # Load adapted VAE
     if adapted_vae_ckpt is not None:
-        adapted_vae = torch.load(os.path.join(adapted_vae_ckpt, 'ckpt.pth'))
-        env_manual.vae.load_state_dict(adapted_vae)
-
-    # TUNG: This piece of code for test random rollout REAL env wrapped by VAE
-    # env_manual.reset()
-    # for _ in range(100):
-    #     print('Random action')
-    #     act = env_manual.action_space.sample()
-    #     env_manual.step(act)
+        adapted_vae = torch.load(open(os.path.join(adapted_vae_ckpt, 'vae_ckpt.pth'), "rb"))
+        env_manual.vae.load_state_dict(adapted_vae['model'])
+    else:
+        print('[WARNING] Using VAE of source')
 
     # This piece of code for test learn policy on REAL env
     paths = []
@@ -110,9 +107,26 @@ def simulate_policy_on_real(args, adapted_vae_ckpt='None'):
                 logger.record_tabular(k, v)
         logger.dump_tabular()
 
+    puck_distance, hand_distance = [], []
+    for i in range(args.n_test):
+        puck_distance.append(paths[i]['env_infos'][-1]['puck_distance'])
+        hand_distance.append(paths[i]['env_infos'][-1]['hand_distance'])
+
+    puck_distance = np.array(puck_distance)
+    hand_distance = np.array(hand_distance)
+
+    if args.exp is not None:
+        filename = os.path.join('debug', 'test_policy_' + args.exp + '.npz')
+    else:
+        filename = os.path.join('debug', 'test_policy.npz')
+    np.savez_compressed(filename,
+                        puck_distance=puck_distance,
+                        hand_distance=hand_distance)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='path to the snapshot file')
+parser.add_argument('--vae', type=str, default=None)
 parser.add_argument('--H', type=int, default=50, help='Max length of rollout')
 parser.add_argument('--speedup', type=float, default=10, help='Speedup')
 parser.add_argument('--mode', default='video_env', type=str, help='env mode')
@@ -120,8 +134,15 @@ parser.add_argument('--gpu', action='store_true')
 parser.add_argument('--enable_render', action='store_true')
 parser.add_argument('--hide', action='store_false')
 parser.add_argument('--n_test', type=int, default=100)
+parser.add_argument('--exp', type=str, default=None)
+parser.add_argument('--random', action='store_true')
 args_user = parser.parse_args()
 
 
 if __name__ == "__main__":
+    """
+    Need to provide 2 parameters in list below:
+        file: Path to trained policy (e.g.: /path/to/params.pkl)
+        vae: Path to trained adapted VAE (e.g.: /path/to/vae_file, contains vae_ckpt.pth) 
+    """
     simulate_policy_on_real(args_user)

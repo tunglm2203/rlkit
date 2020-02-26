@@ -1,5 +1,4 @@
 import rlkit.util.hyperparameter as hyp
-from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in
 from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in_aim_v0
 from rlkit.launchers.launcher_util import run_experiment
 import rlkit.torch.vae.vae_schedules as vae_schedules
@@ -14,8 +13,7 @@ if __name__ == "__main__":
         online_vae_exploration=False,
         imsize=48,
         init_camera=sawyer_init_camera_zoomed_in_aim_v0,
-        # env_id='SawyerPushNIPSEasy-v0',
-        env_id='SawyerPushNIPS-v0',
+        env_id='SawyerPushNIPSEasy-v0',
         skewfit_variant=dict(
             save_video=True,
             custom_goal_sampler='replay_buffer',
@@ -36,7 +34,7 @@ if __name__ == "__main__":
             max_path_length=50,
             algo_kwargs=dict(
                 batch_size=1024,
-                num_epochs=1000,
+                num_epochs=500,  # TUNG: 1000
                 num_eval_steps_per_epoch=500,
                 num_expl_steps_per_train_loop=500,
                 num_trains_per_train_loop=1000,
@@ -86,16 +84,18 @@ if __name__ == "__main__":
             ),
         ),
         train_vae_variant=dict(
+            # vae_path=None,
+            vae_path='/mnt/hdd/tung/workspace/rlkit/data/02-25-dev-new-env-examples-skewfit-sawyer-push-pretrain-vae-SawyerPushNIPSEasy-v0/02-25-dev-new-env-examples-skewfit-sawyer-push-pretrain-vae-SawyerPushNIPSEasy-v0_2020_02_25_15_04_39_0000--s-92813/vae.pkl',
             representation_size=4,
             beta=20,
-            num_epochs=0,
+            num_epochs=0,  # TUNG: 0, 201
             dump_skew_debug_plots=False,
             decoder_activation='gaussian',
             generate_vae_dataset_kwargs=dict(
-                N=40,
+                N=10000,   # TUNG: 40
                 test_p=.9,
-                use_cached=False,
-                show=True,
+                use_cached=True,    # TUNG: False
+                show=False,
                 oracle_dataset=True,
                 oracle_dataset_using_set_to_goal=True,
                 n_random_steps=100,

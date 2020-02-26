@@ -240,13 +240,13 @@ class OnlineVaeRelabelingBuffer(SharedObsDictRelabelingBuffer):
                 len(self._vae_sample_probs),
                 batch_size,
                 p=self._vae_sample_probs,
-            )
+            )   # TUNG: Choosing based on probability `self._vae_sample_probs`
             assert (
                 np.max(self._vae_sample_probs) <= 1 and
                 np.min(self._vae_sample_probs) >= 0
             )
         else:
-            indices = self._sample_indices(batch_size)
+            indices = self._sample_indices(batch_size)      # TUNG: randomly
         return indices
 
     def _sample_goals_from_env(self, batch_size):
