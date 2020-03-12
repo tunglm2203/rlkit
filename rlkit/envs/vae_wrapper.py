@@ -338,22 +338,22 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
                 self.input_channels,
                 self.imsize,
                 self.imsize,
-            ).transpose()
+            ).transpose()[:, :, ::-1]
             cv2.imshow('env', img)
             cv2.waitKey(1)
-            reconstruction = self._reconstruct_img(obs['image_observation']).transpose()
+            reconstruction = self._reconstruct_img(obs['image_observation']).transpose()[:, :, ::-1]
             cv2.imshow('env_reconstruction', reconstruction)
             cv2.waitKey(1)
             init_img = self._initial_obs['image_observation'].reshape(
                 self.input_channels,
                 self.imsize,
                 self.imsize,
-            ).transpose()
+            ).transpose()[:, :, ::-1]
             cv2.imshow('initial_state', init_img)
             cv2.waitKey(1)
             init_reconstruction = self._reconstruct_img(
                 self._initial_obs['image_observation']
-            ).transpose()
+            ).transpose()[:, :, ::-1]
             cv2.imshow('init_reconstruction', init_reconstruction)
             cv2.waitKey(1)
 
@@ -362,14 +362,14 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
                 self.input_channels,
                 self.imsize,
                 self.imsize,
-            ).transpose()
+            ).transpose()[:, :, ::-1]
             cv2.imshow('goal_reconstruction', goal)
             cv2.waitKey(1)
             if original_goal is not None:
                 cv2.imshow('goal', original_goal.reshape((
                     self.input_channels,
                     self.imsize,
-                    self.imsize)).transpose())
+                    self.imsize)).transpose()[:, :, ::-1])
                 cv2.waitKey(1)
 
     def _sample_vae_prior(self, batch_size):
