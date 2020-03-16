@@ -65,9 +65,6 @@ def simulate_policy_on_real(args):
         # some environments need to be reconfigured for visualization
         env.enable_render()
 
-    # TUNG: Using a goal sampled from environment
-    env._goal_sampling_mode = 'reset_of_env'
-
     # Re-initialize REAL env wrapped by learned VAE (from SIM)
     env_manual = wrap_real_env_manually(data_ckpt=data, env_name='SawyerPushXYReal-v0')
     if args.gpu:
@@ -78,13 +75,19 @@ def simulate_policy_on_real(args):
         # some environments need to be reconfigured for visualization
         env_manual.enable_render()
 
+    # TUNG: Using a goal sampled from environment
+    env_manual._goal_sampling_mode = 'reset_of_env'
     # Disable re-compute reward since REAL env doesn't provide it
     env_manual.wrapped_env.recompute_reward = False
     env_manual.wrapped_env.wrapped_env.use_gazebo_auto = True
 
     # Load adapted VAE
     if adapted_vae_ckpt is not None:
-        adapted_vae = torch.load(open(os.path.join(adapted_vae_ckpt, 'vae_ckpt.pth'), "rb"))
+        if args.gpu:
+            adapted_vae = torch.load(open(os.path.join(adapted_vae_ckpt, 'vae_ckpt.pth'), "rb"))
+        else:
+            adapted_vae = torch.load(open(os.path.join(adapted_vae_ckpt, 'vae_ckpt.pth'), "rb"),
+                                     map_location='cpu')
         env_manual.vae.load_state_dict(adapted_vae['model'])
     else:
         print('[WARNING] Using VAE of source')
