@@ -2,8 +2,10 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import json
 
 from rlkit.core import logger
+from rlkit.core.logging import MyEncoder
 from rlkit.samplers.rollout_functions import multitask_rollout_sim2real
 from rlkit.torch import pytorch_util as ptu
 from rlkit.envs.vae_wrapper import VAEWrappedEnv
@@ -48,6 +50,21 @@ def wrap_real_env_manually(data_ckpt=None, env_name='SawyerPushXYReal-v0'):
 
 
 def simulate_policy_on_real(args):
+    # Check path of stored directory
+    if not os.path.exists(args.result_path):
+        print('[ERROR-AIM] The directory to store result is not exist.')
+        return
+
+    if args.exp is None:
+        print('[WARNING-AIM] You should set name of experiment.')
+    saved_dir = os.path.join(args.result_path, args.exp)
+    if not os.path.exists(saved_dir):
+        os.mkdir(saved_dir)
+
+    with open(os.path.join(saved_dir, 'log_params.json'), "w") as f:
+        json.dump(vars(args), f, indent=2, sort_keys=True, cls=MyEncoder)
+
+    # Load necessary data
     adapted_vae_ckpt = args.vae
     if args.gpu:
         data = torch.load(open(args.file, "rb"))
@@ -119,24 +136,24 @@ def simulate_policy_on_real(args):
     puck_distance = np.array(puck_distance)
     hand_distance = np.array(hand_distance)
 
-    if args.exp is not None:
-        filename = os.path.join('debug', 'test_policy_' + args.exp + '.npz')
-    else:
-        filename = os.path.join('debug', 'test_policy.npz')
-    np.savez_compressed(filename,
-                        puck_distance=puck_distance,
-                        hand_distance=hand_distance)
+    res_file = os.path.join(saved_dir, 'test_policy.npz')
+    paths_file = os.path.join(saved_dir, 'episodes.npz')
+    print('[INFO] Saving results...')
+    np.savez_compressed(res_file, puck_distance=puck_distance, hand_distance=hand_distance)
+    np.savez_compressed(paths_file, episode=np.array(paths))
+    print('[INFO] Save done.')
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('file', type=str, help='path to the snapshot file')
 parser.add_argument('--vae', type=str, default=None)
 parser.add_argument('--H', type=int, default=50, help='Max length of rollout')
-parser.add_argument('--speedup', type=float, default=10, help='Speedup')
 parser.add_argument('--mode', default='video_env', type=str, help='env mode')
 parser.add_argument('--gpu', action='store_true')
 parser.add_argument('--enable_render', action='store_true')
 parser.add_argument('--hide', action='store_false')
+
+parser.add_argument('--result_path', type=str, default='results')
 parser.add_argument('--n_test', type=int, default=100)
 parser.add_argument('--exp', type=str, default=None)
 parser.add_argument('--random', action='store_true')
