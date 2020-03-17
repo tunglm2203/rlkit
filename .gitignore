@@ -9,3 +9,17 @@ MANIFEST
 \.idea/
 data
 tester/*.npz
+debug/
+results/
+tester/images_real/
+tester/images_sim/
+tester/random_images_real.10000/
+tester/random_images_real.new/
+tester/random_images_real/
+tester/random_images_sim/
+tester/random_images_sim.10000/
+tester/random_images_sim.new/
+tester/trash/
+tester/random_pair_sim/
+tester/random_pair_real
+tester/random_pair_real.old/
