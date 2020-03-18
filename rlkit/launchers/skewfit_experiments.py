@@ -267,6 +267,7 @@ def generate_vae_dataset(variant):
                     env.set_to_goal(goal)
                     obs = env._get_obs()
                 elif random_rollout_data:
+                    print(i)
                     if i % n_random_steps == 0:
                         g = dict(
                             state_desired_goal=env.sample_goal_for_rollout())
