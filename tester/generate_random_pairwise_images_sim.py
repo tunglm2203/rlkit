@@ -1,11 +1,11 @@
 # This script run for both multiworld and sawyer_control to test 2 environments
-import numpy as np
-import gym
-import cv2
 import os
-import time
+import cv2
+import numpy as np
 from tqdm import tqdm
+import time
 
+import gym
 import multiworld
 from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in_aim_v0
 from multiworld.core.image_env import ImageEnv
@@ -34,14 +34,25 @@ def compute_checking_coor(env, _n_points_ee_x, _n_points_ee_y, _n_points_obj_x, 
 
 
 def main():
-    # USER constant scope
+    # ======================== USER SCOPE  ========================
+    env_id = 'SawyerPushNIPSEasy-v0'
+    # env_id = 'SawyerPushNIPS-v0'
     imsize = 48
     n_trajectories = 50
     horizon = 19
-    root_path = '/home/tung/workspace/rlkit/tester/random_pair_sim'
+    data_folder = 'rand_pair_sim.{}'.format(n_trajectories * (horizon + 1))
+    # key_img = 'image_desired_goal'
+    key_img = 'image_observation'
 
-    # TUNG: Simulation
-    env_sim = gym.make('SawyerPushNIPSEasy-v0')
+    root_path = '/home/tung/workspace/rlkit/tester'
+
+    # =================== GENERATING DATA SCOPE  ==================
+    save_path = os.path.join(root_path, data_folder)
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+
+    # Create environment
+    env_sim = gym.make(env_id)
     env_sim = ImageEnv(env_sim,
                        imsize=imsize,
                        normalize=True,
@@ -56,25 +67,25 @@ def main():
                 o = env_sim.reset()
             else:
                 o, _, _, _ = env_sim.step(env_sim.action_space.sample())
-
             episode.append(o['state_observation'])
-
-            img = o['image_observation']
+            img = o[key_img]
             g = img
 
             im_show = cv2.resize(g.reshape(3, imsize, imsize).transpose()[:, :, ::-1], (128, 128))
             cv2.imshow('observation', im_show)
             cv2.waitKey(1)
-            filename = os.path.join(root_path, 'ep_{}_s_{}'.format(i, t))
+
+            filename = os.path.join(save_path, 'ep_{}_s_{}'.format(i, t))
             cv2.imwrite(filename + '.png', unormalize_image(im_show))
-            np.savez_compressed(filename + '.npy', im=img)
+            np.savez_compressed(filename, im=img)
+
             if t == horizon:
                 break
             else:
                 t += 1
         episodes.append(np.array(episode))
 
-    save_traj_path = os.path.join(root_path, 'random_trajectories.npz')
+    save_traj_path = os.path.join(save_path, 'random_trajectories.npz')
     np.savez_compressed(save_traj_path, data=episodes)
 
 

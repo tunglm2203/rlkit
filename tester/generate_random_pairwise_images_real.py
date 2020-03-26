@@ -23,9 +23,6 @@ def check_successful_go_to_pos_xy(env, pos, thres):
 
 
 def set_obj_location(obj_pos, env):
-    # args = dict(x=obj_pos[0] + 0.05,
-    #             y=obj_pos[1] - 0.05,
-    #             z=obj_pos[2])
     args = dict(x=obj_pos[0],
                 y=obj_pos[1],
                 z=obj_pos[2])
@@ -68,31 +65,39 @@ def compute_checking_coor(env, _n_points_ee_x, _n_points_ee_y, _n_points_obj_x, 
 
 
 def main():
-    data = np.load('/home/tung/workspace/rlkit/tester/random_pair_sim/random_trajectories.npz')
-    data = data['data']
-    # USER constant scope
-    thresh = 0.04       # Threshold to verify robot reach to correct position or not
-    imsize = 48
-    z_coor = 0.11    # 0.11
+    root_path = '/home/tung/workspace/rlkit/tester'
+    data_folder_sim = 'rand_pair_sim.1000'
+    data = np.load(os.path.join(root_path, data_folder_sim, 'random_trajectories.npz'))
+    episodes = data['data']
 
-    obj_name = 'cylinder'
-    n_trajectories = len(data)
-    horizon = len(data[0])
-    root_path = '/home/tung/workspace/rlkit/tester/random_pair_real'
+    horizon = len(episodes[0])
+    n_trajectories = len(episodes)
+    print('[INFO] Number of trajectories: ', n_trajectories)
+    print('[INFO] Horizon: ', horizon)
 
     success = bcolors.OKGREEN + 'Success' + bcolors.ENDC
     failed = bcolors.FAIL + 'Failed' + bcolors.ENDC
+    # ======================== USER SCOPE  ========================
+    env_id = 'SawyerPushXYReal-v0'
+    # env_id = 'SawyerPushXYRealMedium-v0'
+    imsize = 48
+    data_folder = 'rand_pair_real.{}'.format(n_trajectories * horizon)
 
-    print('Number of trajectories: ', n_trajectories)
-    print('Horizon: ', horizon)
+    thresh = 0.04       # Threshold to verify robot reach to correct position or not
+    z_coor = 0.11    # 0.11
+    obj_name = 'cylinder'
+
+    # =================== GENERATING DATA SCOPE  ==================
+    save_path = os.path.join(root_path, data_folder)
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
 
     # TUNG: Real
-    env_real = gym.make('SawyerPushXYReal-v0')
+    env_real = gym.make(env_id, use_gazebo_auto=True)
     env_real = ImageEnv(env_real,
                         imsize=imsize,
                         normalize=True,
                         transpose=True)
-    env_real.wrapped_env.use_gazebo_auto = True
 
     ee_pos = np.zeros(3)
     obj_pos = np.zeros(3)
@@ -100,8 +105,8 @@ def main():
     re_generate_start_epoch = 0  # TUNG: Remember to set this param
     for i in tqdm(range(re_generate_start_epoch, n_trajectories)):
         for t in range(horizon):
-            ee_pos[:2], ee_pos[2] = data[i][t][:2], z_coor
-            obj_pos[:2], obj_pos[2] = data[i][t][2:], env_real.pos_object_reset_position[2]
+            ee_pos[:2], ee_pos[2] = episodes[i][t][:2], z_coor
+            obj_pos[:2], obj_pos[2] = episodes[i][t][2:], env_real.pos_object_reset_position[2]
             angles = env_real.request_ik_angles(ee_pos, env_real._get_joint_angles())
             env_real.send_angle_action(angles, ee_pos)
             if check_successful_go_to_pos_xy(env_real, ee_pos, thresh):
