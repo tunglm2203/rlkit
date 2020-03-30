@@ -47,9 +47,9 @@ def simulate_policy(args):
         env.enable_render()
 
     # ===================== SETUP ENVIRONMENT SCOPE =====================
-    # TUNG:
-    env._goal_sampling_mode = 'reset_of_env'
-    env.wrapped_env.wrapped_env.randomize_goals = False
+    # TUNG: Setup environment use predefined goals, not randomized
+    env.wrapped_env.wrapped_env.randomize_goals = False  # Setup Mujoco env
+    env._goal_sampling_mode = 'reset_of_env'  # Setup VAE env
 
     # Set goal to set of fixed goals
     set_of_goals = np.array([

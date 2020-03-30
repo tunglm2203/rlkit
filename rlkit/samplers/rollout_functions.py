@@ -46,7 +46,7 @@ def multitask_rollout_sim2real(
                 _a[2] = env.wrapped_env.wrapped_env.config.POSITION_SAFETY_BOX_LOWS[2]
             else:
                 _a = a
-            print('[DEBUG] Action: ', a)
+            # print('[DEBUG] Action: ', a)
             if random_policy:
                 next_o, r, d, env_info = env.step(env.action_space.sample())
             else:
