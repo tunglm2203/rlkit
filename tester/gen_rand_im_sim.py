@@ -15,17 +15,25 @@ multiworld.register_all_envs()
 
 def main():
     # ======================== USER SCOPE  ========================
+    root_path = '/home/tung/workspace/rlkit/tester/'
+
+    n_samples = 500
+    data_folder_sim = 'rand_pair_real.{}'.format(n_samples)
+    data = np.load(os.path.join(root_path, data_folder_sim, 'random_trajectories.npz'))
+    episodes = data['data']
+
+    horizon = len(episodes[0])
+    n_trajectories = len(episodes)
+    print('[INFO] Number of trajectories: ', n_trajectories)
+    print('[INFO] Horizon: ', horizon)
+    assert horizon * n_trajectories == n_samples, "The number of samples is different: {}".format(n_samples)
     env_id = 'SawyerPushNIPSEasy-v0'
     # env_id = 'SawyerPushNIPS-v0'
-    n_samples = 10
     imsize = 48
     n_samples_to_reset = 1
     data_folder = 'rand_img_sim.{}'.format(n_samples)
     key_img = 'image_desired_goal'
     # key_img = 'image_observation'
-
-    root_path = '/home/tung/workspace/rlkit/tester/'
-
     # =================== GENERATING DATA SCOPE  ==================
     save_path = os.path.join(root_path, data_folder)
     if not os.path.exists(save_path):

@@ -110,12 +110,46 @@ def simulate_policy_on_real(args):
 
     # ===================== SETUP ENVIRONMENT SCOPE =====================
     # TUNG: Using a goal sampled from environment
-    env_manual._goal_sampling_mode = 'reset_of_env'
-    env_manual.wrapped_env.wrapped_env.randomize_goals = False
+    env_manual.wrapped_env.wrapped_env.fix_goal = True          # Setup Mujoco env
+    env_manual._goal_sampling_mode = 'reset_of_env'             # Setup VAE env
     # Disable re-compute reward since REAL env doesn't provide it
-    env_manual.wrapped_env.recompute_reward = False
-    env_manual.wrapped_env.wrapped_env.use_gazebo_auto = True
+    env_manual.wrapped_env.recompute_reward = False             # Setup Mujoco env
+    env_manual.wrapped_env.wrapped_env.use_gazebo = True        # Setup Mujoco env
+    env_manual.wrapped_env.wrapped_env.use_gazebo_auto = True   # Setup Mujoco env
 
+    # Set goal to set of fixed goals
+    # set_of_goals = np.array([
+    #     [[0.65, 0.1], [0.7, 0.1]],
+    #     [[0.55, -0.1], [0.7, 0.1]],
+    #     [[0.65, -0.1], [0.7, 0.05]],
+    #     [[0.55, -0.1], [0.7, 0.05]],
+    #     [[0.65, 0.1], [0.7, 0.05]],
+    #     [[0.55, 0.1], [0.7, -0.05]],
+    #     [[0.55, -0.05], [0.55, -0.1]],
+    #     [[0.6, 0.1], [0.7, -0.05]],
+    #     [[0.55, -0.1], [0.55, -0.15]],
+    #     [[0.55, -0.05], [0.7, -0.05]],
+    #     [[0.55, 0.1], [0.7, 0.1]],
+    #     [[0.65, 0.1], [0.7, 0.15]],
+    #     [[0.6, 0.05], [0.7, 0.05]],
+    #     [[0.6, 0.], [0.55, 0.05]],
+    #     [[0.55, -0.05], [0.7, 0.05]],
+    #     [[0.6, -0.05], [0.65, -0.1]],
+    #     [[0.65, -0.05], [0.65, -0.1]],
+    #     [[0.6, 0.], [0.7, -0.05]],
+    #     [[0.65, -0.05], [0.7, -0.1]],
+    #     [[0.55, -0.1], [0.5, -0.15]],
+    #     [[0.6, 0.1], [0.65, 0.15]],
+    #     [[0.55, -0.05], [0.55, 0.1]],
+    #     [[0.55, 0.05], [0.6, 0.15]],
+    #     [[0.65, 0.], [0.7, 0.1]],
+    #     [[0.6, 0.05], [0.7, 0.15]],
+    #     [[0.6, -0.05], [0.55, 0.1]],
+    #     [[0.6, 0.05], [0.7, -0.1]],
+    #     [[0.55, -0.05], [0.5, -0.15]],
+    #     [[0.65, 0.05], [0.7, -0.05]],
+    #     [[0.6, -0.05], [0.5, -0.1]]
+    # ])
     set_of_goals = np.array([
         [[0.55, 0.], [0.65, 0.1]],
         [[0.55, -0.1], [0.7, 0.1]],
@@ -156,8 +190,8 @@ def simulate_policy_on_real(args):
     print('[INFO] Starting test in set of goals...')
     for goal_id in tqdm(range(n_goals)):
         # Assign goal from set of goals
-        env_manual.wrapped_env.wrapped_env.fixed_hand_goal = set_of_goals[goal_id][0]
-        env_manual.wrapped_env.wrapped_env.fixed_puck_goal = set_of_goals[goal_id][1]
+        env_manual.wrapped_env.wrapped_env.fixed_goal = \
+            np.concatenate((set_of_goals[goal_id][1], set_of_goals[goal_id][0]))
 
         # Number of test per each goal
         n_test, paths_per_goal = 0, []
