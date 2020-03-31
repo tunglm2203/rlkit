@@ -109,10 +109,12 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
 
     def _update_obs(self, obs):
         latent_obs = self._encode_one(obs[self.vae_input_observation_key])
+        orig_goal = obs['image_desired_goal'].copy()    # TUNG: hack to get original goal image
         obs['latent_observation'] = latent_obs
         obs['latent_achieved_goal'] = latent_obs
         obs['observation'] = latent_obs
         obs['achieved_goal'] = latent_obs
+        obs['image_desired_goal_orig'] = orig_goal      # TUNG: hack to get original goal image
         obs = {**obs, **self.desired_goal}
         return obs
 
