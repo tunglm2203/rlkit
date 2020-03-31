@@ -5,10 +5,12 @@ import cv2
 multiworld.register_mujoco_envs()
 # env = gym.make('SawyerPushNIPS-v0')
 # env = gym.make('SawyerPushNIPSEasy-v0')
-env = gym.make('SawyerPushNIPSHarder-v0')
+# env = gym.make('SawyerPushNIPSHarder-v0')
+env = gym.make('SawyerPickupEnvYZEasy-v0')
 
 from multiworld.core.image_env import ImageEnv
 from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in_aim_v0
+from multiworld.envs.mujoco.cameras import sawyer_pick_and_place_camera
 
 use_image_env = True
 im_size = 512
@@ -18,7 +20,8 @@ if use_image_env:
                        imsize=im_size,
                        normalize=True,
                        transpose=True,
-                       init_camera=sawyer_init_camera_zoomed_in_aim_v0,
+                       # init_camera=sawyer_init_camera_zoomed_in_aim_v0,
+                       init_camera=sawyer_pick_and_place_camera,
                        )
 else:
     img_env = env
