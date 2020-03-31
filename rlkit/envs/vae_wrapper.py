@@ -104,7 +104,6 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             {'latent_achieved_goal': new_obs['latent_achieved_goal'],
              'latent_desired_goal': new_obs['latent_desired_goal']}
         )
-        import pdb; pdb.set_trace()
         self.try_render(new_obs, obs['image_desired_goal'])
         return new_obs, reward, done, info
 
