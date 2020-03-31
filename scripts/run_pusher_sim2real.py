@@ -186,7 +186,9 @@ def simulate_policy_on_real(args):
 
     # ===================== TESTING SCOPE =====================
     # This piece of code for test learn policy on REAL env
-    paths, puck_distances, hand_distances, goals = [], [], [], []
+    paths, goals = [], []
+    final_puck_distance = np.zeros((n_goals, args.n_test))
+    final_hand_distance = np.zeros_like(final_puck_distance)
     print('[INFO] Starting test in set of goals...')
     for goal_id in tqdm(range(n_goals)):
         # Assign goal from set of goals
@@ -231,22 +233,19 @@ def simulate_policy_on_real(args):
 
             if store:
                 goals.append(dict(ee=set_of_goals[goal_id][0], obj=set_of_goals[goal_id][1]))
-                puck_distances.append(path['env_infos'][-1]['puck_distance'])
-                hand_distances.append(path['env_infos'][-1]['hand_distance'])
+                final_puck_distance[goal_id, n_test] = path['env_infos'][-1]['puck_distance']
+                final_hand_distance[goal_id, n_test] = path['env_infos'][-1]['hand_distance']
         paths.append(paths_per_goal)
 
     # ===================== POST-PROCESSING SCOPE =====================
-    puck_distances = np.array(puck_distances)
-    hand_distances = np.array(hand_distances)
-
     print('[INFO] Saving results...')
     np.savez_compressed(res_file,
-                        puck_distance=puck_distances,
-                        hand_distance=hand_distances,
+                        final_puck_distance=final_puck_distance,
+                        final_hand_distance=final_hand_distance,
                         goals=goals)
     np.savez_compressed(paths_file, episode=np.array(paths))
-    print("Hand distance: mean=%.4f, std=%.4f" % (hand_distances.mean(), hand_distances.std()))
-    print("Obj distance: mean=%.4f, std=%.4f" % (puck_distances.mean(), puck_distances.std()))
+    print("Puck distance: mean=%.4f, std=%.4f" % (final_puck_distance.mean(), final_puck_distance.std()))
+    print("Hand distance: mean=%.4f, std=%.4f" % (final_hand_distance.mean(), final_hand_distance.std()))
     print('[INFO] Save done.')
 
 
