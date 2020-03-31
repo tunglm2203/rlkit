@@ -233,8 +233,8 @@ def simulate_policy_on_real(args):
 
             if store:
                 goals.append(dict(ee=set_of_goals[goal_id][0], obj=set_of_goals[goal_id][1]))
-                final_puck_distance[goal_id, n_test] = path['env_infos'][-1]['puck_distance']
-                final_hand_distance[goal_id, n_test] = path['env_infos'][-1]['hand_distance']
+                final_puck_distance[goal_id, n_test - 1] = path['env_infos'][-1]['puck_distance']
+                final_hand_distance[goal_id, n_test - 1] = path['env_infos'][-1]['hand_distance']
         paths.append(paths_per_goal)
 
     # ===================== POST-PROCESSING SCOPE =====================
