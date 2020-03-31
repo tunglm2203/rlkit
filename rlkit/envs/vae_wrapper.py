@@ -104,17 +104,16 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             {'latent_achieved_goal': new_obs['latent_achieved_goal'],
              'latent_desired_goal': new_obs['latent_desired_goal']}
         )
+        import pdb; pdb.set_trace()
         self.try_render(new_obs, obs['image_desired_goal'])
         return new_obs, reward, done, info
 
     def _update_obs(self, obs):
         latent_obs = self._encode_one(obs[self.vae_input_observation_key])
-        orig_goal = obs['image_desired_goal'].copy()    # TUNG: hack to get original goal image
         obs['latent_observation'] = latent_obs
         obs['latent_achieved_goal'] = latent_obs
         obs['observation'] = latent_obs
         obs['achieved_goal'] = latent_obs
-        obs['image_desired_goal_orig'] = orig_goal      # TUNG: hack to get original goal image
         obs = {**obs, **self.desired_goal}
         return obs
 
@@ -344,6 +343,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             cv2.imshow('env', img)
             cv2.waitKey(1)
             reconstruction = self._reconstruct_img(obs['image_observation']).transpose()[:, :, ::-1]
+            obs['image_observation_rec'] = reconstruction
             cv2.imshow('env_reconstruction', reconstruction)
             cv2.waitKey(1)
             init_img = self._initial_obs['image_observation'].reshape(
@@ -368,6 +368,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             cv2.imshow('goal_reconstruction', goal)
             cv2.waitKey(1)
             if original_goal is not None:
+                obs['image_desired_goal_orig'] = original_goal  # TUNG: Hack to return original goal
                 cv2.imshow('goal', original_goal.reshape((
                     self.input_channels,
                     self.imsize,
