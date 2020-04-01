@@ -1,7 +1,10 @@
 import os
+import cv2
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+
+from rlkit.sim2real.sim2real_utils import convert_vec2img_3_48_48
 
 
 def plot_mean_std(data):
@@ -23,7 +26,7 @@ def plot_mean_std(data):
         plt.text(x[i] + .03, y_mean[i], str(i), fontsize=8)
 
 
-def main(args):
+def plot_performance(args):
     error = []
     if len(args.error) > 0:
         for i in range(len(args.error)):
@@ -86,12 +89,58 @@ def main(args):
     plt.show()
 
 
+def replay_epside(args):
+    path = os.path.join(args.dir[0], 'episodes.npz')
+    episode_start = args.start
+
+    large_size = (128, 128)
+    key_im_obs_ori = 'image_observation'
+    key_im_obs_rec = 'image_observation_rec'
+    key_im_goal_orig = 'image_desired_goal_orig'
+    key_im_goal_rec = 'image_desired_goal'
+
+    data = np.load(path)
+    data = data['episode']
+
+    N, m = data.shape
+    horizon = data[0][0]['observations'].shape[0]
+
+    for eps in range(episode_start, N):
+        for t in range(m):
+            for h in range(horizon):
+                im_obs_orig = data[eps][t]['next_observations'][h][key_im_obs_ori]
+                im_obs_rec = data[eps][t]['next_observations'][h][key_im_obs_rec]
+                im_goal_orig = data[eps][t]['next_observations'][h][key_im_goal_orig]
+                im_goal_rec = data[eps][t]['next_observations'][h][key_im_goal_rec]
+
+                im_obs_orig = cv2.resize(convert_vec2img_3_48_48(im_obs_orig), large_size)
+                im_obs_rec = cv2.resize(convert_vec2img_3_48_48(im_obs_rec), large_size)
+                # im_obs_rec = cv2.resize(im_obs_rec, large_size)
+                im_goal_orig = cv2.resize(convert_vec2img_3_48_48(im_goal_orig), large_size)
+                im_goal_rec = cv2.resize(convert_vec2img_3_48_48(im_goal_rec), large_size)
+
+                im_1 = np.concatenate((im_obs_orig, im_obs_rec), axis=1)
+                im_2 = np.concatenate((im_goal_orig, im_goal_rec), axis=1)
+                im = np.concatenate((im_1, im_2), axis=0)
+                cv2.imshow('Observation/Goal', im)
+                cv2.waitKey(1)
+                print('Episode/test/step: {}/{}/{}'.format(eps, t, h))
+                input('Press Enter...')
+        # cv2.destroyAllWindows()
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('dir', type=str, nargs='+')
 parser.add_argument('--one', action='store_true')
 parser.add_argument('--n_goals', type=int, default=30)
 parser.add_argument('--error', type=str, nargs='+', default=[])
+
+parser.add_argument('--replay', action='store_true')
+parser.add_argument('--start', type=int, default=0)
 args_user = parser.parse_args()
 
 if __name__ == '__main__':
-    main(args_user)
+    if args_user.replay:
+        replay_epside(args_user)
+    else:
+        plot_performance(args_user)
