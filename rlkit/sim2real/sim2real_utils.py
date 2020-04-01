@@ -78,3 +78,18 @@ def setup_logger_path(args, path):
         os.mkdir(os.path.join(path, prefix_dir))
     os.mkdir(ckpt_path)
     return ckpt_path
+
+
+def convert_vec2img_3_48_48(vec):
+    """
+    Converting image in vector to matrix.
+    :param vec: shape of N x 6912
+    :return: mat: shape of N x 48 x 48 x 3
+    """
+    if len(vec.shape) == 1:
+        assert vec.shape[0] == 6912, "Single, shape of image is not 48x48x3"
+        mat = vec.reshape(3, 48, 48).transpose()[:, :, ::-1]    # inverse color channel for cv2
+    elif len(vec.shape) == 2:
+        assert vec.shape[1] == 6912, "Batch, shape of image is not 48x48x3"
+        raise NotImplementedError()
+    return mat
