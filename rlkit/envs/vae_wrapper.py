@@ -342,7 +342,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             cv2.imshow('env', img)
             cv2.waitKey(1)
             reconstruction = self._reconstruct_img(obs['image_observation'])
-            obs['image_observation_rec'] = reconstruction
+            obs['image_observation_rec'] = reconstruction.flatten().copy()
             reconstruction = reconstruction.transpose()[:, :, ::-1]
             cv2.imshow('env_reconstruction', reconstruction)
             cv2.waitKey(1)
@@ -368,7 +368,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             cv2.imshow('goal_reconstruction', goal)
             cv2.waitKey(1)
             if original_goal is not None:
-                obs['image_desired_goal_orig'] = original_goal  # TUNG: Hack to return original goal
+                obs['image_desired_goal_orig'] = original_goal.copy()  # TUNG: Hack to return original goal
                 cv2.imshow('goal', original_goal.reshape((
                     self.input_channels,
                     self.imsize,
