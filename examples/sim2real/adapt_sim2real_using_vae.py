@@ -121,23 +121,27 @@ def pairwise_loss_schedule(value, epoch):
         return value
 
 
-def consistency_loss(pair_sim, pair_real, sim_vae, real_vae):
+def consistency_loss(pair_sim, pair_real, sim_vae, real_vae, use_mu=False):
     latent_distribution_params_sim = sim_vae.encode(pair_sim)
-    # latents_sim = sim_vae.reparameterize(latent_distribution_params_sim)
-    # _, obs_distribution_params_real = real_vae.decode(latents_sim)
-    _, obs_distribution_params_real = real_vae.decode(latent_distribution_params_sim[0])
+    if use_mu:
+        _, obs_distribution_params_real = real_vae.decode(latent_distribution_params_sim[0])
+    else:
+        latents_sim = sim_vae.reparameterize(latent_distribution_params_sim)
+        _, obs_distribution_params_real = real_vae.decode(latents_sim)
 
     latent_distribution_params_real = real_vae.encode(pair_real)
-    # latents_real = real_vae.reparameterize(latent_distribution_params_real)
-    # _, obs_distribution_params_sim = sim_vae.decode(latents_real)
-    _, obs_distribution_params_sim = sim_vae.decode(latent_distribution_params_real[0])
+    if use_mu:
+        _, obs_distribution_params_sim = sim_vae.decode(latent_distribution_params_real[0])
+    else:
+        latents_real = real_vae.reparameterize(latent_distribution_params_real)
+        _, obs_distribution_params_sim = sim_vae.decode(latents_real)
 
     ctc_sim2real = real_vae.logprob(pair_real, obs_distribution_params_real)
     ctc_real2sim = sim_vae.logprob(pair_sim, obs_distribution_params_sim)
     return -1 * (ctc_sim2real + ctc_real2sim)
 
 
-def pairloss(pair_sim, pair_real, sim_vae, real_vae):
+def mse_pair(pair_sim, pair_real, sim_vae, real_vae):
     src_latent_mean, _ = sim_vae.encode(pair_sim)
     tgt_latent_mean, _ = real_vae.encode(pair_real)
     loss = F.mse_loss(tgt_latent_mean, src_latent_mean)
@@ -155,6 +159,11 @@ def main(args):
     variant = dict(
         # Must have 'images_sim' & 'images_real'
         path_to_data='/mnt/hdd/tung/workspace/rlkit/tester',
+        rand_src_dir='random_images_sim.10000',
+        rand_tgt_dir='random_images_real.10000',
+        pair_src_dir='rand_pair_sim.1000',
+        pair_tgt_dir='rand_pair_real.1000',
+        test_ratio=0.1,
         vae_kwargs=dict(
             input_channels=3,
             architecture=imsize48_default_architecture,
@@ -162,29 +171,28 @@ def main(args):
         ),
         decoder_activation=identity,
         representation_size=4,
+        default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt',
+        beta=20,
+
+        # TUNG: Change below
         n_epochs=2000,
         step1=10000,  # Step to decay learning rate
         step2=12000,
         batch_size=50,
         lr=1e-3,
-        beta=20,
-        alpha=10.0,
-        default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt',
+        alpha=1.0,
+        use_mu=True
     )
-    rand_src_dir = 'random_images_sim.10000'
-    rand_tgt_dir = 'random_images_real.10000'
-    # pair_src_dir = 'images_sim'
-    # pair_tgt_dir = 'images_real'
-    pair_src_dir = 'random_pair_sim'
-    pair_tgt_dir = 'random_pair_real'
 
     ##########################
     #       Load data        #
     ##########################
     rand_src_train, rand_tgt_train, rand_src_eval, rand_tgt_eval, \
     pair_src_train, pair_src_eval, pair_tgt_train, pair_tgt_eval = \
-        load_all_required_data(variant['path_to_data'], rand_src_dir, rand_tgt_dir,
-                               pair_src_dir, pair_tgt_dir)
+        load_all_required_data(variant['path_to_data'],
+                               variant['rand_src_dir'], variant['rand_tgt_dir'],
+                               variant['pair_src_dir'], variant['pair_tgt_dir'],
+                               test_ratio=variant['test_ratio'])
     print('No. of random train data: Sim={}, Real={}'.format(len(rand_src_train),
                                                              len(rand_tgt_train)))
     print('No. of pair train data: Sim={}, Real={}'.format(len(pair_src_train),
@@ -238,8 +246,9 @@ def main(args):
             vae_loss = -1 * log_prob + variant['beta'] * kle
 
             # Pairwise loss
-            # pair_loss = pairloss(pair_img_src, pair_img_tgt, src_vae, tgt_vae)
-            pair_loss = consistency_loss(pair_img_src, pair_img_tgt, src_vae, tgt_vae)
+            # pair_loss = mse_pair(pair_img_src, pair_img_tgt, src_vae, tgt_vae)
+            pair_loss = consistency_loss(pair_img_src, pair_img_tgt, src_vae, tgt_vae,
+                                         variant['use_mu'])
 
             loss = vae_loss + variant['alpha'] * pair_loss
             loss.backward()
