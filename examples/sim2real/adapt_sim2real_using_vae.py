@@ -5,6 +5,7 @@ from collections import OrderedDict
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import json
+import random
 
 import torch
 import torch.nn.functional as F
@@ -18,6 +19,22 @@ from rlkit.core.logging import MyEncoder
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.core import logger
 from rlkit.sim2real.sim2real_utils import *
+
+
+def set_seed(seed):
+    """
+    Set the seed for all the possible random number generators.
+
+    :param seed:
+    :return: None
+    """
+    seed = int(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+    torch.manual_seed(seed)
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
 
 
 def get_batch(data, batch_idx, idxes, batch_size):
@@ -121,6 +138,39 @@ def pairwise_loss_schedule(value, epoch):
         return value
 
 
+def vae_loss(vae, batch_data, beta):
+    # _, tgt_obs_distr_params, tgt_latent_distr_param = vae(batch_data)
+    tgt_latent_distr_param = vae.encode(batch_data)
+    latents = vae.reparameterize(tgt_latent_distr_param)
+    _, tgt_obs_distr_params = vae.decode(latents)
+    log_prob = vae.logprob(batch_data, tgt_obs_distr_params)
+    kle = vae.kl_divergence(tgt_latent_distr_param)
+    loss = -1 * log_prob + beta * kle
+    return loss, log_prob, kle
+
+
+def vae_loss_rm_rec(vae, batch_data, beta):
+    log_prob = torch.FloatTensor(([0.0]))
+    _, tgt_obs_distr_params, tgt_latent_distr_param = vae(batch_data)
+    # log_prob = vae.logprob(batch_data, tgt_obs_distr_params)
+    kle = vae.kl_divergence(tgt_latent_distr_param)
+    loss = beta * kle
+    return loss, log_prob, kle
+
+
+def vae_loss_stop_grad_dec(vae, batch_data, beta):
+    # _, tgt_obs_distr_params, tgt_latent_distr_param = vae(batch_data)
+    tgt_latent_distr_param = vae.encode(batch_data)
+    latents = vae.reparameterize(tgt_latent_distr_param)
+    with torch.no_grad():
+        _, tgt_obs_distr_params = vae.decode(latents)
+
+    log_prob = vae.logprob(batch_data, tgt_obs_distr_params)
+    kle = vae.kl_divergence(tgt_latent_distr_param)
+    loss = -1 * log_prob + beta * kle
+    return loss, log_prob, kle
+
+
 def consistency_loss(pair_sim, pair_real, sim_vae, real_vae, use_mu=False):
     latent_distribution_params_sim = sim_vae.encode(pair_sim)
     if use_mu:
@@ -139,6 +189,27 @@ def consistency_loss(pair_sim, pair_real, sim_vae, real_vae, use_mu=False):
     ctc_sim2real = real_vae.logprob(pair_real, obs_distribution_params_real)
     ctc_real2sim = sim_vae.logprob(pair_sim, obs_distribution_params_sim)
     return -1 * (ctc_sim2real + ctc_real2sim)
+
+
+def consistency_loss_1(pair_sim, pair_real, sim_vae, real_vae, use_mu=False):
+    # latent_distribution_params_sim = sim_vae.encode(pair_sim)
+    # if use_mu:
+    #     _, obs_distribution_params_real = real_vae.decode(latent_distribution_params_sim[0])
+    # else:
+    #     latents_sim = sim_vae.reparameterize(latent_distribution_params_sim)
+    #     _, obs_distribution_params_real = real_vae.decode(latents_sim)
+
+    latent_distribution_params_real = real_vae.encode(pair_real)
+    if use_mu:
+        _, obs_distribution_params_sim = sim_vae.decode(latent_distribution_params_real[0])
+    else:
+        latents_real = real_vae.reparameterize(latent_distribution_params_real)
+        _, obs_distribution_params_sim = sim_vae.decode(latents_real)
+
+    # ctc_sim2real = real_vae.logprob(pair_real, obs_distribution_params_real)
+    ctc_real2sim = sim_vae.logprob(pair_sim, obs_distribution_params_sim)
+    # return -1 * (ctc_sim2real + ctc_real2sim)
+    return -1 * ctc_real2sim
 
 
 def mse_pair(pair_sim, pair_real, sim_vae, real_vae):
@@ -163,7 +234,7 @@ def main(args):
         rand_tgt_dir='random_images_real.10000',
         pair_src_dir='rand_pair_sim.1000',
         pair_tgt_dir='rand_pair_real.1000',
-        test_ratio=0.1,
+        test_ratio=0.2,
         vae_kwargs=dict(
             input_channels=3,
             architecture=imsize48_default_architecture,
@@ -175,14 +246,19 @@ def main(args):
         beta=20,
 
         # TUNG: Change below
+        seed=None,
         n_epochs=2000,
         step1=10000,  # Step to decay learning rate
         step2=12000,
         batch_size=50,
         lr=1e-3,
         alpha=1.0,
-        use_mu=True
+        use_mu=True,
+        init_tgt_by_src=False
     )
+    if args.seed is None:
+        variant['seed'] = random.randint(0, 100000)
+    set_seed(variant['seed'])
 
     ##########################
     #       Load data        #
@@ -211,6 +287,9 @@ def main(args):
     src_vae.to(ptu.device)
     tgt_vae.to(ptu.device)
 
+    if variant['init_tgt_by_src']:
+        tgt_vae.load_state_dict(src_vae.state_dict())
+
     # Setup criterion and optimizer
     params = tgt_vae.parameters()
     optimizer = optim.Adam(params, lr=variant['lr'])
@@ -238,19 +317,21 @@ def main(args):
             pair_img_tgt = get_batch(pair_tgt_train, b, idxes_pair_data, variant['batch_size'])
 
             optimizer.zero_grad()
-            _, tgt_obs_distr_params, tgt_latent_distr_param = tgt_vae(rand_img_tgt)
-            log_prob = tgt_vae.logprob(rand_img_tgt, tgt_obs_distr_params)
-            kle = tgt_vae.kl_divergence(tgt_latent_distr_param)
-
             # VAE loss
-            vae_loss = -1 * log_prob + variant['beta'] * kle
+            total_vae_loss, log_prob, kle = vae_loss(tgt_vae, rand_img_tgt, variant['beta'])
+            # total_vae_loss, log_prob, kle = vae_loss_rm_rec(tgt_vae, rand_img_tgt,
+            #                                                 variant['beta'])
+            # total_vae_loss, log_prob, kle = vae_loss_stop_grad_dec(tgt_vae, rand_img_tgt,
+            #                                                        variant['beta'])
 
             # Pairwise loss
             # pair_loss = mse_pair(pair_img_src, pair_img_tgt, src_vae, tgt_vae)
             pair_loss = consistency_loss(pair_img_src, pair_img_tgt, src_vae, tgt_vae,
                                          variant['use_mu'])
+            # pair_loss = consistency_loss_1(pair_img_src, pair_img_tgt, src_vae, tgt_vae,
+            #                                variant['use_mu'])
 
-            loss = vae_loss + variant['alpha'] * pair_loss
+            loss = total_vae_loss + variant['alpha'] * pair_loss
             loss.backward()
 
             losses.append(loss.item())
@@ -273,6 +354,7 @@ parser.add_argument('file', type=str, help='path to the snapshot file')
 parser.add_argument('--vae', type=str, default=None, help='path save checkpoint')
 parser.add_argument('--exp', type=str, default=None, help='Another description for experiment name')
 parser.add_argument('--gpu', action='store_false')
+parser.add_argument('--seed', type=int, default=None)
 user_args = parser.parse_args()
 
 
