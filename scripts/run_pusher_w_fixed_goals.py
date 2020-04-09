@@ -160,8 +160,10 @@ def simulate_policy(args):
                         final_hand_distance=final_hand_distance,
                         goals=goals)
     np.savez_compressed(paths_file, episode=np.array(paths))
-    print("Puck distance: mean=%.4f, std=%.4f" % (final_puck_distance.mean(), final_puck_distance.std()))
-    print("Hand distance: mean=%.4f, std=%.4f" % (final_hand_distance.mean(), final_hand_distance.std()))
+    print("Puck distance: mean=%.4f, std=%.4f" % (final_puck_distance.mean(),
+                                                  final_puck_distance.mean(axis=0).std()))
+    print("Hand distance: mean=%.4f, std=%.4f" % (final_hand_distance.mean(),
+                                                  final_hand_distance.mean(axis=0).std()))
     print('[INFO] Save done.')
 
 
