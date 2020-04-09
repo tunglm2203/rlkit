@@ -137,6 +137,10 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
         return obs
 
     def _update_info(self, info, obs):
+        info['puck_distance_mujoco'] = np.linalg.norm(self.image_env_sim.wrapped_env.get_puck_pos()[:2] -
+                                                      obs['state_desired_goal_mujoco'][2:])
+        info['hand_distance_mujoco'] = np.linalg.norm(self.wrapped_env._get_endeffector_pose()[:2] -
+                                                      obs['state_desired_goal_mujoco'][:2])
         latent_distribution_params = self.vae.encode(
             ptu.from_numpy(obs[self.vae_input_observation_key].reshape(1,-1))
         )
@@ -194,6 +198,10 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             img = self.image_env_sim._get_flat_img()
             # Encode image
             goals['image_desired_goal_mujoco'] = img[None]
+
+            ee_pos_mujoco = self.image_env_sim.wrapped_env.get_endeff_pos()[:2]
+            obj_pos_mujoco = self.image_env_sim.wrapped_env.get_puck_pos()[:2]
+            goals['state_desired_goal_mujoco'] = np.concatenate((ee_pos_mujoco, obj_pos_mujoco))[None]
             latent_goals = self._encode(goals['image_desired_goal_mujoco'])
 
             # latent_goals = self._encode(goals[self.vae_input_desired_goal_key])
