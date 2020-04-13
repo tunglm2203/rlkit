@@ -13,6 +13,7 @@ from rlkit.samplers.rollout_functions import multitask_rollout_sim2real
 from rlkit.torch import pytorch_util as ptu
 # from rlkit.envs.vae_wrapper import VAEWrappedEnv
 from rlkit.envs.vae_wrapper_hack import VAEWrappedEnv
+from rlkit.sim2real.goal_test import set_of_goals
 import torch
 
 import gym
@@ -124,71 +125,6 @@ def simulate_policy_on_real(args):
     env_manual.wrapped_env.wrapped_env.use_gazebo = True        # Setup Mujoco env
     env_manual.wrapped_env.wrapped_env.use_gazebo_auto = True   # Setup Mujoco env
 
-    # Set goal to set of fixed goals
-    # set_of_goals = np.array([
-    #     [[0.65, 0.1], [0.7, 0.1]],
-    #     [[0.55, -0.1], [0.7, 0.1]],
-    #     [[0.65, -0.1], [0.7, 0.05]],
-    #     [[0.55, -0.1], [0.7, 0.05]],
-    #     [[0.65, 0.1], [0.7, 0.05]],
-    #     [[0.55, 0.1], [0.7, -0.05]],
-    #     [[0.55, -0.05], [0.55, -0.1]],
-    #     [[0.6, 0.1], [0.7, -0.05]],
-    #     [[0.55, -0.1], [0.55, -0.15]],
-    #     [[0.55, -0.05], [0.7, -0.05]],
-    #     [[0.55, 0.1], [0.7, 0.1]],
-    #     [[0.65, 0.1], [0.7, 0.15]],
-    #     [[0.6, 0.05], [0.7, 0.05]],
-    #     [[0.6, 0.], [0.55, 0.05]],
-    #     [[0.55, -0.05], [0.7, 0.05]],
-    #     [[0.6, -0.05], [0.65, -0.1]],
-    #     [[0.65, -0.05], [0.65, -0.1]],
-    #     [[0.6, 0.], [0.7, -0.05]],
-    #     [[0.65, -0.05], [0.7, -0.1]],
-    #     [[0.55, -0.1], [0.5, -0.15]],
-    #     [[0.6, 0.1], [0.65, 0.15]],
-    #     [[0.55, -0.05], [0.55, 0.1]],
-    #     [[0.55, 0.05], [0.6, 0.15]],
-    #     [[0.65, 0.], [0.7, 0.1]],
-    #     [[0.6, 0.05], [0.7, 0.15]],
-    #     [[0.6, -0.05], [0.55, 0.1]],
-    #     [[0.6, 0.05], [0.7, -0.1]],
-    #     [[0.55, -0.05], [0.5, -0.15]],
-    #     [[0.65, 0.05], [0.7, -0.05]],
-    #     [[0.6, -0.05], [0.5, -0.1]]
-    # ])
-    set_of_goals = np.array([
-        [[0.55, 0.], [0.65, 0.1]],
-        [[0.55, -0.1], [0.7, 0.1]],
-        [[0.65, -0.1], [0.7, 0.05]],
-        [[0.55, -0.1], [0.7, 0.05]],
-        [[0.60, 0.], [0.7, 0.05]],
-        [[0.55, 0.1], [0.7, -0.05]],
-        [[0.55, 0.05], [0.55, -0.05]],
-        [[0.60, 0.1], [0.7, -0.05]],
-        [[0.65, -0.1], [0.65, 0.1]],
-        [[0.55, -0.05], [0.7, -0.05]],
-        [[0.55, 0.1], [0.7, 0.1]],
-        [[0.60, 0.1], [0.7, 0.15]],
-        [[0.60, 0.05], [0.7, 0.05]],
-        [[0.60, -0.05], [0.55, 0.05]],
-        [[0.55, -0.05], [0.7, 0.05]],
-        [[0.60, 0.], [0.55, -0.1]],
-        [[0.55, -0.1], [0.7, -0.05]],
-        [[0.60, 0.], [0.7, -0.05]],
-        [[0.60, -0.05], [0.7, -0.05]],
-        [[0.55, -0.1], [0.5, -0.15]],
-        [[0.60, 0.05], [0.65, 0.15]],
-        [[0.55, -0.05], [0.55, 0.1]],
-        [[0.55, 0.05], [0.60, 0.15]],
-        [[0.65, 0.], [0.7, 0.1]],
-        [[0.60, 0.05], [0.7, 0.15]],
-        [[0.60, -0.05], [0.55, 0.1]],
-        [[0.60, 0.05], [0.7, -0.1]],
-        [[0.55, -0.05], [0.5, -0.15]],
-        [[0.65, 0.05], [0.7, -0.05]],
-        [[0.6, -0.05], [0.5, -0.1]]
-    ])
     n_goals = len(set_of_goals)
 
     # ===================== TESTING SCOPE =====================
@@ -230,7 +166,6 @@ def simulate_policy_on_real(args):
                 paths_per_goal.append(path)
                 n_test += 1
                 store = True
-
             # if hasattr(env_manual, "log_diagnostics"):
             #     env_manual.log_diagnostics(paths_per_goal)
             # if hasattr(env_manual, "get_diagnostics"):
@@ -251,8 +186,10 @@ def simulate_policy_on_real(args):
                         final_hand_distance=final_hand_distance,
                         goals=goals)
     np.savez_compressed(paths_file, episode=np.array(paths))
-    print("Puck distance: mean=%.4f, std=%.4f" % (final_puck_distance.mean(), final_puck_distance.std()))
-    print("Hand distance: mean=%.4f, std=%.4f" % (final_hand_distance.mean(), final_hand_distance.std()))
+    print("Puck distance: mean=%.4f, std=%.4f" % (final_puck_distance.mean(),
+                                                  final_puck_distance.mean(axis=0).std()))
+    print("Hand distance: mean=%.4f, std=%.4f" % (final_hand_distance.mean(),
+                                                  final_hand_distance.mean(axis=0).std()))
     print('[INFO] Save done.')
 
 

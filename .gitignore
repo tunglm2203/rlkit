@@ -23,3 +23,13 @@ tester/trash/
 tester/random_pair_sim/
 tester/random_pair_real
 tester/random_pair_real.old/
+tester/rand_pair_real.1000/
+tester/rand_pair_real.500/
+tester/rand_pair_real.5000/
+tester/rand_pair_sim.500/
+tester/rand_pair_sim.5000/
+tester/rand_pair_sim.1000/
+tester/rand_real.1000/
+tester/rand_sim.1000/
+tester/random_images_real.4000/
+tester/random_images_sim.4000/
