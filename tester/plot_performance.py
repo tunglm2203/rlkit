@@ -104,13 +104,39 @@ def replay_epside(args):
     data = np.load(path)
     data = data['episode']
 
+    N, m = data.shape
+    horizon = data[0][0]['observations'].shape[0]
+
     gen_mujoco_im = False
     if im_obs_mujoco_key in data[0][0]['next_observations'][0].keys() and \
             im_goal_mujoco_key in data[0][0]['next_observations'][0].keys():
         gen_mujoco_im = True
 
-    N, m = data.shape
-    horizon = data[0][0]['observations'].shape[0]
+    if args.mujoco:
+        test_policy = np.load(os.path.join(args.dir[0], 'test_policy.npz'))
+        final_puck_dists = test_policy['final_puck_distance']
+        final_hand_dists = test_policy['final_hand_distance']
+
+        final_puck_dists_mujoco = np.zeros_like(final_puck_dists)
+        final_hand_dists_mujoco = np.zeros_like(final_hand_dists)
+
+        for i in range(N):
+            for j in range(m):
+                final_puck_dists_mujoco[i, j] = data[i, j]['env_infos'][-1]['puck_distance_mujoco']
+                final_hand_dists_mujoco[i, j] = data[i, j]['env_infos'][-1]['hand_distance_mujoco']
+
+        plt.figure()
+        plot_mean_std(final_puck_dists)
+        plot_mean_std(final_puck_dists_mujoco)
+        plt.legend(['real', 'sim'])
+        plt.title('final_puck_distance')
+
+        plt.figure()
+        plot_mean_std(final_hand_dists)
+        plot_mean_std(final_hand_dists_mujoco)
+        plt.legend(['real', 'sim'])
+        plt.title('final_hand_distance')
+        plt.show(block=False)
 
     for eps in range(episode_start, N):
         for t in range(m):
@@ -152,6 +178,7 @@ parser.add_argument('dir', type=str, nargs='+')
 parser.add_argument('--one', action='store_true')
 parser.add_argument('--n_goals', type=int, default=30)
 parser.add_argument('--error', type=str, nargs='+', default=[])
+parser.add_argument('--mujoco', action='store_true')
 
 parser.add_argument('--replay', action='store_true')
 parser.add_argument('--start', type=int, default=0)
