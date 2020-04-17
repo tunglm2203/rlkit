@@ -22,6 +22,7 @@ def skewfit_full_experiment(variant):
     variant['skewfit_variant']['save_vae_data'] = True
     full_experiment_variant_preprocess(variant)
     train_vae_and_update_variant(variant)
+    input('Press Enter to continue...')
     skewfit_experiment(variant['skewfit_variant'])
 
 
