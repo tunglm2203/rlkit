@@ -38,7 +38,7 @@ def main():
     env_id = 'SawyerPushNIPSEasy-v0'
     # env_id = 'SawyerPushNIPS-v0'
     imsize = 48
-    n_trajectories = 50
+    n_trajectories = 500
     horizon = 9
     data_folder = 'rand_pair_sim.{}'.format(n_trajectories * (horizon + 1))
     # key_img = 'image_desired_goal'
@@ -68,6 +68,7 @@ def main():
 
     for i in tqdm(range(n_trajectories)):
         for t in range(horizon + 1):
+            # Roll-out into environment
             env_sim._goal_xyxy = np.zeros(4)
             env_sim._goal_xyxy[:2] = np.array(episodes[i][t]['ee_pos'][:2])   # EE
             env_sim._goal_xyxy[2:] = np.array(episodes[i][t]['obj_pos'][:2])  # OBJ
@@ -75,17 +76,21 @@ def main():
             env_sim.set_goal_xyxy(env_sim._goal_xyxy)
             env_sim.reset_mocap_welds()
             env_sim._get_obs()
-
-            # env_state = env_sim.wrapped_env.get_env_state()
             env_sim.wrapped_env.set_to_goal(env_sim.wrapped_env.get_goal())
+
+            # Get true state (coordinates)
+            # TUNG: don't have this step
+
+            # Get image of state
             img = env_sim._get_flat_img()
-            # env_sim.wrapped_env.set_env_state(env_state)
             g = img
 
+            # Show image of state
             im_show = cv2.resize(g.reshape(3, imsize, imsize).transpose()[:, :, ::-1], (128, 128))
             cv2.imshow('observation', im_show)
             cv2.waitKey(1)
 
+            # Save image of state
             filename = os.path.join(save_path, 'ep_{}_s_{}'.format(i, t))
             cv2.imwrite(filename + '.png', unormalize_image(im_show))
             np.savez_compressed(filename, im=img)

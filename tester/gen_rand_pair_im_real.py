@@ -92,7 +92,7 @@ def main():
     if not os.path.exists(save_path):
         os.mkdir(save_path)
 
-    # TUNG: Real
+    # Create environment
     env_real = gym.make(env_id, use_gazebo_auto=True)
     env_real = ImageEnv(env_real,
                         imsize=imsize,
@@ -105,6 +105,7 @@ def main():
     re_generate_start_epoch = 0  # TUNG: Remember to set this param
     for i in tqdm(range(re_generate_start_epoch, n_trajectories)):
         for t in range(horizon):
+            # Roll-out into environment
             ee_pos[:2], ee_pos[2] = episodes[i][t][:2], z_coor
             obj_pos[:2], obj_pos[2] = episodes[i][t][2:], env_real.pos_object_reset_position[2]
             angles = env_real.request_ik_angles(ee_pos, env_real._get_joint_angles())
@@ -116,12 +117,16 @@ def main():
 
             env_real.wrapped_env.set_obj_to_pos_in_gazebo(obj_name, obj_pos)
 
+            # Get image of state
             img = env_real._get_flat_img()
             g = img
 
+            # Show image of state
             im_show = cv2.resize(g.reshape(3, imsize, imsize).transpose()[:, :, ::-1], (128, 128))
             cv2.imshow('observation', im_show)
             cv2.waitKey(1)
+
+            # Save image of state
             filename = os.path.join(root_path, 'ep_{}_s_{}'.format(i, t))
             cv2.imwrite(filename + '.png', unormalize_image(im_show))
             np.savez_compressed(filename + '.npy', im=img)
