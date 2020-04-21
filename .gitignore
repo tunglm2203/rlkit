@@ -33,3 +33,4 @@ tester/rand_real.1000/
 tester/rand_sim.1000/
 tester/random_images_real.4000/
 tester/random_images_sim.4000/
+*.npz
