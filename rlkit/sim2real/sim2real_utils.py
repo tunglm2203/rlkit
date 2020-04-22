@@ -93,3 +93,42 @@ def convert_vec2img_3_48_48(vec):
         assert vec.shape[1] == 6912, "Batch, shape of image is not 48x48x3"
         raise NotImplementedError()
     return mat
+
+
+def set_env_state_sim2sim(src, target):
+    from multiworld.core.image_env import ImageEnv
+    if isinstance(src, ImageEnv) and isinstance(target, ImageEnv):
+        """ New method to set state, only possible in Mujoco Environment
+        """
+        # Get state
+        env_state = src.wrapped_env.get_env_state()
+        # Set state
+        target.wrapped_env.set_env_state(env_state)
+
+        # """ Old method to set state, possible in Real and Gazebo
+        # """
+        # # Get coordinate real
+        # ee_pos = src.wrapped_env.get_endeff_pos()
+        # obj_pos = src.wrapped_env.get_puck_pos()
+        # # Make the coordinate of Mujoco
+        # target.wrapped_env._goal_xyxy = np.zeros(4)
+        # target.wrapped_env._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
+        # target.wrapped_env._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
+        # target.set_goal_xyxy(target._goal_xyxy)
+        # target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
+    else:
+        print('[AIM-ERROR] Only support ImageEnv, this is {}'.format(type(src)))
+        exit()
+    return 0
+
+
+def set_env_state_real2real():
+    pass
+
+
+def set_env_state_real2sim():
+    pass
+
+
+def set_env_state_sim2real():
+    pass

@@ -11,6 +11,7 @@ import rlkit.torch.pytorch_util as ptu
 from multiworld.core.multitask_env import MultitaskEnv
 from multiworld.envs.env_util import get_stat_in_paths, create_stats_ordered_dict
 from rlkit.envs.wrappers import ProxyEnv
+from rlkit.sim2real.sim2real_utils import set_env_state_sim2sim
 
 
 class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
@@ -111,21 +112,9 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
 
     def _update_obs(self, obs):
         # TUNG: Hack this to use mujoco image
-        # Get coordinate real
-        ee_pos = self.wrapped_env.wrapped_env.get_endeff_pos()
-        obj_pos = self.wrapped_env.wrapped_env.get_puck_pos()
-        # Make the coordinate of Mujoco
-        self.image_env_sim._goal_xyxy = np.zeros(4)
-        self.image_env_sim._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
-        self.image_env_sim._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
-        self.image_env_sim.set_goal_xyxy(self.image_env_sim._goal_xyxy)
-        self.image_env_sim.reset_mocap_welds()
-        self.image_env_sim._get_obs()
+        set_env_state_sim2sim(src=self.wrapped_env, target=self.image_env_sim)
         # Get image on Mujoco
-        self.image_env_sim.wrapped_env.set_to_goal(self.image_env_sim.wrapped_env.get_goal())
-        img = self.image_env_sim._get_flat_img()
-        # Encode image
-        obs['image_observation_mujoco'] = img
+        obs['image_observation_mujoco'] = self.image_env_sim._get_flat_img()
         latent_obs = self._encode_one(obs['image_observation_mujoco'])
 
         # latent_obs = self._encode_one(obs[self.vae_input_observation_key])
@@ -183,29 +172,21 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             goals = {k: v[None] for k, v in goal.items()}
 
             # TUNG: Hack this to use mujoco image
-            # Get coordinate real
-            obj_pos = goals['state_desired_goal'][0][2:]
-            ee_pos = goals['state_desired_goal'][0][:2]
-            # Make the coordinate of Mujoco
-            self.image_env_sim._goal_xyxy = np.zeros(4)
-            self.image_env_sim._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
-            self.image_env_sim._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
-            self.image_env_sim.set_goal_xyxy(self.image_env_sim._goal_xyxy)
-            self.image_env_sim.reset_mocap_welds()
-            self.image_env_sim._get_obs()
+            set_env_state_sim2sim(src=self.wrapped_env, target=self.image_env_sim)
             # Get image on Mujoco
-            self.image_env_sim.wrapped_env.set_to_goal(self.image_env_sim.wrapped_env.get_goal())
             img = self.image_env_sim._get_flat_img()
-            # Encode image
             goals['image_desired_goal_mujoco'] = img[None]
 
+            # Get info of goal to compute distance later
             ee_pos_mujoco = self.image_env_sim.wrapped_env.get_endeff_pos()[:2]
             obj_pos_mujoco = self.image_env_sim.wrapped_env.get_puck_pos()[:2]
             goals['state_desired_goal_mujoco'] = np.concatenate((ee_pos_mujoco, obj_pos_mujoco))[None]
+            # Encode image
             latent_goals = self._encode(goals['image_desired_goal_mujoco'])
 
-            # latent_goals = self._encode(goals[self.vae_input_desired_goal_key])
-
+            # latent_goals = self._encode(
+            #     goals[self.vae_input_desired_goal_key]
+            # )
         elif self._goal_sampling_mode == 'vae_prior':
             goals = {}
             latent_goals = self._sample_vae_prior(batch_size)
@@ -387,7 +368,6 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             ).transpose()[:, :, ::-1]
             cv2.imshow('env', img)
             cv2.waitKey(1)
-
             # TUNG: hack
             img = obs['image_observation_mujoco'].reshape(
                 self.input_channels,
@@ -396,7 +376,6 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             ).transpose()[:, :, ::-1]
             cv2.imshow('env_mujoco', img)
             cv2.waitKey(1)
-
             # TUNG: hack
             # reconstruction = self._reconstruct_img(obs['image_observation'])
             reconstruction = self._reconstruct_img(obs['image_observation_mujoco'])
@@ -425,7 +404,6 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             ).transpose()[:, :, ::-1]
             cv2.imshow('goal_reconstruction', goal)
             cv2.waitKey(1)
-
             # TUNG: hack
             goal = obs['image_desired_goal_mujoco'].reshape(
                 self.input_channels,
@@ -434,7 +412,6 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             ).transpose()[:, :, ::-1]
             cv2.imshow('goal_mujoco', goal)
             cv2.waitKey(1)
-
             if original_goal is not None:
                 obs['image_desired_goal_orig'] = original_goal.copy()  # TUNG: Hack to return original goal
                 cv2.imshow('goal', original_goal.reshape((
