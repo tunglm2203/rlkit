@@ -172,7 +172,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             goals = {k: v[None] for k, v in goal.items()}
 
             # TUNG: Hack this to use mujoco image
-            set_env_state_sim2sim(src=self.wrapped_env, target=self.image_env_sim)
+            set_env_state_sim2sim(src=self.wrapped_env, target=self.image_env_sim, set_goal=True)
             # Get image on Mujoco
             img = self.image_env_sim._get_flat_img()
             goals['image_desired_goal_mujoco'] = img[None]
