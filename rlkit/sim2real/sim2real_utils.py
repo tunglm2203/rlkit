@@ -20,27 +20,35 @@ def load_all_required_data(path='', rand_src_dir=None, rand_tgt_dir=None,
                            pair_src_dir=None, pair_tgt_dir=None,
                            file_format='*.npz',
                            test_ratio=0.1, seed=0):
-    rand_data_sim = load_data(os.path.join(path, rand_src_dir), file_format)
-    rand_data_real = load_data(os.path.join(path, rand_tgt_dir), file_format)
+    rand_sim_train, rand_real_train, rand_sim_eval, rand_real_eval = None, None, None, None
+    if rand_src_dir is not None:
+        rand_data_sim = load_data(os.path.join(path, rand_src_dir), file_format)
+    if rand_tgt_dir is not None:
+        rand_data_real = load_data(os.path.join(path, rand_tgt_dir), file_format)
     pair_data_sim = load_data(os.path.join(path, pair_src_dir), file_format)
     pair_data_real = load_data(os.path.join(path, pair_tgt_dir), file_format)
-    assert len(rand_data_sim) == len(rand_data_real), \
-        "[ERROR] Number of random sim & real data not equal"
+
+    if rand_src_dir is not None and rand_tgt_dir is not None:
+        assert len(rand_data_sim) == len(rand_data_real), \
+            "[ERROR] Number of random sim & real data not equal"
     assert len(pair_data_sim) == len(pair_data_real), \
         "[ERROR] Number of pair sim & real data not equal"
-    n_rand_trains = int(len(rand_data_sim) * (1 - test_ratio))
+    if rand_src_dir is not None and rand_tgt_dir is not None:
+        n_rand_trains = int(len(rand_data_sim) * (1 - test_ratio))
     n_pair_trains = int(len(pair_data_sim) * (1 - test_ratio))
 
     st0 = np.random.get_state()     # Get current state (state 0)
     np.random.seed(seed)
-    idxes_rand = np.random.permutation(len(rand_data_sim))
+    if rand_src_dir is not None and rand_tgt_dir is not None:
+        idxes_rand = np.random.permutation(len(rand_data_sim))
     idxes_pair = np.random.permutation(len(pair_data_sim))
     np.random.set_state(st0)        # Return to state 0
 
-    rand_sim_train = rand_data_sim[idxes_rand[:n_rand_trains]]
-    rand_real_train = rand_data_real[idxes_rand[:n_rand_trains]]
-    rand_sim_eval = rand_data_sim[idxes_rand[n_rand_trains:]]
-    rand_real_eval = rand_data_real[idxes_rand[n_rand_trains:]]
+    if rand_src_dir is not None and rand_tgt_dir is not None:
+        rand_sim_train = rand_data_sim[idxes_rand[:n_rand_trains]]
+        rand_real_train = rand_data_real[idxes_rand[:n_rand_trains]]
+        rand_sim_eval = rand_data_sim[idxes_rand[n_rand_trains:]]
+        rand_real_eval = rand_data_real[idxes_rand[n_rand_trains:]]
 
     pair_sim_train = pair_data_sim[idxes_pair[:n_pair_trains]]
     pair_sim_eval = pair_data_sim[idxes_pair[n_pair_trains:]]
@@ -64,15 +72,15 @@ def load_data(path='', file_format='*.npz'):
     return np.array(images)
 
 
-def setup_logger_path(args, path):
+def setup_logger_path(args, path, seed):
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y-%m-%d %H:%M:%S.%f %Z')
     prefix_dir = 'vae-exp-date-' + timestamp[:10]
     sub_dir = 'vae-exp-time-' + timestamp[11:19].replace(':', '-')
     if args.exp is not None:
-        ckpt_path = os.path.join(path, prefix_dir, sub_dir + '-' + args.exp)
+        ckpt_path = os.path.join(path, prefix_dir, args.exp + '-' + sub_dir + '-s' + str(seed))
     else:
-        ckpt_path = os.path.join(path, prefix_dir, sub_dir)
+        ckpt_path = os.path.join(path, prefix_dir, 'None-' + sub_dir + '-s' + str(seed))
 
     if not os.path.exists(os.path.join(path, prefix_dir)):
         os.mkdir(os.path.join(path, prefix_dir))
@@ -97,7 +105,7 @@ def convert_vec2img_3_48_48(vec):
 
 def set_env_state_sim2sim(src, target, set_goal=False):
     """
-    Function to set state from sim to sim env
+    Function to set state from sim (Mujoco) to sim (Mujoco)
     :param src: Env want to get state
     :param target: Env want to set state from src's state
     :param set_goal: This call for set goal or not
@@ -140,7 +148,30 @@ def set_env_state_real2real():
     pass
 
 
-def set_env_state_real2sim():
+def set_env_state_real2sim(src, target, set_goal=False):
+    """
+    Function to set state from real (Gazebo) to sim (Mujoco)
+    :param src: Env want to get state
+    :param target: Env want to set state from src's state
+    :param set_goal: This call for set goal or not
+    :return:
+    """
+    from multiworld.core.image_env import ImageEnv
+    if isinstance(src, ImageEnv) and isinstance(target, ImageEnv):
+        # Get coordinate real
+        ee_pos = src.wrapped_env._get_endeffector_pose()
+        obj_pos = src.wrapped_env.get_obj_pos_in_gazebo('cylinder')
+        # Make the coordinate of Mujoco
+        target._goal_xyxy = np.zeros(4)
+        target._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
+        target._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
+        target.set_goal_xyxy(target._goal_xyxy)
+        # target.reset_mocap_welds()
+        # target._get_obs()
+        target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
+    else:
+        print('[AIM-ERROR] Only support ImageEnv, this is {}'.format(type(src)))
+        exit()
     pass
 
 
