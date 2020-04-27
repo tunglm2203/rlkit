@@ -221,6 +221,12 @@ class ConvVAE(GaussianLatentVAE):
         elif self.decoder_distribution == 'gaussian_identity_variance':
             return torch.clamp(decoded, 0, 1), [torch.clamp(decoded, 0, 1),
                                                 torch.ones_like(decoded)]
+        elif self.decoder_distribution == 'laplace_identity_variance':
+            return torch.clamp(decoded, 0, 1), [torch.clamp(decoded, 0, 1),
+                                                torch.ones_like(decoded)]
+        elif self.decoder_distribution == 'huber_identity_variance':
+            return torch.clamp(decoded, 0, 1), [torch.clamp(decoded, 0, 1),
+                                                torch.ones_like(decoded)]
         else:
             raise NotImplementedError('Distribution {} not supported'.format(
                 self.decoder_distribution))
@@ -240,6 +246,18 @@ class ConvVAE(GaussianLatentVAE):
                                    dim=1).contiguous().view(-1, self.imlength)
             log_prob = -1 * F.mse_loss(inputs, obs_distribution_params[0],
                                        reduction='elementwise_mean')
+            return log_prob
+        elif self.decoder_distribution == 'laplace_identity_variance':
+            inputs = inputs.narrow(start=0, length=self.imlength,
+                                   dim=1).contiguous().view(-1, self.imlength)
+            log_prob = -1 * F.l1_loss(inputs, obs_distribution_params[0],
+                                      reduction='elementwise_mean')
+            return log_prob
+        elif self.decoder_distribution == 'huber_identity_variance':
+            inputs = inputs.narrow(start=0, length=self.imlength,
+                                   dim=1).contiguous().view(-1, self.imlength)
+            log_prob = -1 * F.smooth_l1_loss(obs_distribution_params[0], inputs,
+                                             reduction='elementwise_mean')
             return log_prob
         else:
             raise NotImplementedError('Distribution {} not supported'.format(
