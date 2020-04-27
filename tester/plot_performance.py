@@ -3,6 +3,7 @@ import cv2
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+import glob
 
 from rlkit.sim2real.sim2real_utils import convert_vec2img_3_48_48
 
@@ -37,7 +38,7 @@ def plot_performance(args):
 
     # ============= REGION TO COMPUTE STATISTIC TO PRINT =============
     print(' ======================== Average results ========================')
-    # Scan list of directories
+    # Scan list of main experiments
     for i in range(len(args.dir)):
         if args.dir[i].split('/')[-1] != '':
             legends.append(args.dir[i].split('/')[-1])
@@ -46,9 +47,23 @@ def plot_performance(args):
         else:
             print('Cannot find legend of {}'.format(args.dir[i]))
 
-        # Read the stored result
-        collect_data.append(np.load(os.path.join(args.dir[i], 'test_policy.npz')))
-        n_goals = len(collect_data[i]['final_puck_distance'])
+        # Scan sub experiments
+        if args.dir[i][-1] != '/':
+            main_dir = args.dir[i] + '/'
+        else:
+            main_dir = args.dir[i]
+        sub_exps = [os.path.join(main_dir, d)
+                    for d in os.listdir(main_dir) if os.path.isdir(os.path.join(main_dir, d))]
+        n_sub_exps = len(sub_exps)
+        # Reading the stored results ...
+        if n_sub_exps > 0:  # ...in sub folder
+            collect_data_subexp = [np.load(os.path.join(sub_exp, 'test_policy.npz'))
+                                   for sub_exp in sub_exps]
+            collect_data.append(collect_data_subexp)
+            n_goals = len(collect_data[i][0]['final_puck_distance'])
+        else:   # ...in main folder
+            collect_data.append(np.load(os.path.join(args.dir[i], 'test_policy.npz')))
+            n_goals = len(collect_data[i]['final_puck_distance'])
 
         # Pre-process result
         if args.one:
@@ -60,13 +75,29 @@ def plot_performance(args):
             final_puck_dists.append(collect_data[i]['final_puck_distance'][idxes_for_correct_exp])
             final_hand_dists.append(collect_data[i]['final_hand_distance'][idxes_for_correct_exp])
         else:
-            final_puck_dists.append(collect_data[i]['final_puck_distance'])
-            final_hand_dists.append(collect_data[i]['final_hand_distance'])
-
-        print("Result: puck_distance=%.4f/%.4f, hand_distance=%.4f/%.4f, exp=%s" %
-              (final_puck_dists[-1].mean(), final_puck_dists[-1].mean(axis=0).std(),
-               final_hand_dists[-1].mean(), final_hand_dists[-1].mean(axis=0).std(),
-               legends[i]))
+            if n_sub_exps > 0:
+                sub_final_puck_dists = [collect_data[i][k]['final_puck_distance'] for k in
+                                        range(n_sub_exps)]
+                sub_final_hand_dists = [collect_data[i][k]['final_hand_distance'] for k in
+                                        range(n_sub_exps)]
+                sub_final_puck_dists = np.array(sub_final_puck_dists)
+                sub_final_hand_dists = np.array(sub_final_hand_dists)
+                final_puck_dists.append(sub_final_puck_dists.mean(axis=2).swapaxes(1, 0))
+                final_hand_dists.append(sub_final_hand_dists.mean(axis=2).swapaxes(1, 0))
+            else:
+                final_puck_dists.append(collect_data[i]['final_puck_distance'])
+                final_hand_dists.append(collect_data[i]['final_hand_distance'])
+        if n_sub_exps > 0:
+            print(
+                "Result (std of %d exps): puck_distance=%.4f/%.4f, hand_distance=%.4f/%.4f, exp=%s" %
+                (n_sub_exps, sub_final_puck_dists.mean(), sub_final_puck_dists.mean(axis=(1, 2)).std(),
+                 sub_final_hand_dists.mean(), sub_final_hand_dists.mean(axis=(1, 2)).std(),
+                 legends[i]))
+        else:
+            print("Result (std of 1 exps): puck_distance=%.4f/%.4f, hand_distance=%.4f/%.4f, exp=%s" %
+                  (final_puck_dists[-1].mean(), final_puck_dists[-1].mean(axis=0).std(),
+                   final_hand_dists[-1].mean(), final_hand_dists[-1].mean(axis=0).std(),
+                   legends[i]))
     print(' =================================================================')
 
     # ============= REGION TO COMPUTE STATISTIC TO PLOT =============
