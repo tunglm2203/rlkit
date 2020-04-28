@@ -50,14 +50,14 @@ def main():
     print('Running all experiments...')
     for proc in procs_list:
         proc.wait()
-        proc_cnt += 1
-        if proc_cnt == n_procs - 1:
-            while True:
-                output = proc.stdout.readline()
-                if output == '' and proc.poll() is not None:
-                    break
-                if output:
-                    print(output.strip())
+        # proc_cnt += 1
+        # if proc_cnt == n_procs - 1:
+        #     while True:
+        #         output = proc.stdout.readline()
+        #         if output == '' and proc.poll() is not None:
+        #             break
+        #         if output:
+        #             print(output.strip())
     print('Complete running all experiments.')
 
 
