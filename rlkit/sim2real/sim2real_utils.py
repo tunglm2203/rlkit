@@ -1,9 +1,19 @@
 import os
 import glob
+import json
+import random
 import datetime
 import numpy as np
 import dateutil.tz
+from collections import OrderedDict
+from tensorboardX import SummaryWriter
 
+import torch
+from torch.nn import functional as F
+
+from rlkit.core import logger
+from rlkit.core.logging import MyEncoder
+from rlkit.torch import pytorch_util as ptu
 from rlkit.torch.vae.conv_vae import (ConvVAE,)
 
 
@@ -177,3 +187,69 @@ def set_env_state_real2sim(src, target, set_goal=False):
 
 def set_env_state_sim2real():
     pass
+
+
+def setup_logger(args, variant):
+    ckpt_path = setup_logger_path(args=args, path=variant['default_path'], seed=variant['seed'])
+    tensor_board = SummaryWriter(ckpt_path)
+    with open(os.path.join(ckpt_path, 'log_params.json'), "w") as f:
+        json.dump(variant, f, indent=2, sort_keys=True, cls=MyEncoder)
+    eval_statistics = OrderedDict()
+    logger.set_snapshot_dir(ckpt_path)
+    logger.add_tabular_output(
+        'vae_progress.csv', relative_to_snapshot_dir=True
+    )
+
+    return eval_statistics, tensor_board, ckpt_path
+
+
+def set_seed(seed):
+    """
+    Set the seed for all the possible random number generators.
+
+    :param seed:
+    :return: None
+    """
+    seed = int(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+    torch.manual_seed(seed)
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
+
+
+def get_batch(data, batch_idx, idxes, batch_size):
+    _n_batchs = len(idxes) // batch_size
+    if batch_idx >= _n_batchs:
+        batch_idx = batch_idx % _n_batchs
+    batch_data = ptu.from_numpy(data[idxes[batch_idx * batch_size:(batch_idx + 1) * batch_size]])
+    return batch_data
+
+
+def mse_loss(inputs, targets, imlength=None):
+    if imlength is not None:
+        inputs = inputs.narrow(start=0, length=imlength, dim=1).contiguous().view(-1, imlength)
+    loss = F.mse_loss(inputs, targets, reduction='elementwise_mean')
+    return loss
+
+
+def huber_loss(inputs, targets, imlength=None):
+    if imlength is not None:
+        inputs = inputs.narrow(start=0, length=imlength, dim=1).contiguous().view(-1, imlength)
+    loss = F.smooth_l1_loss(targets, inputs, reduction='elementwise_mean')
+    return loss
+
+
+def l1_loss(inputs, targets, imlength=None):
+    if imlength is not None:
+        inputs = inputs.narrow(start=0, length=imlength, dim=1).contiguous().view(-1, imlength)
+    loss = F.l1_loss(inputs, targets, reduction='elementwise_mean')
+    return loss
+
+
+def pairwise_loss_schedule(value, epoch):
+    if epoch < 500:
+        return 0.0
+    else:
+        return value
