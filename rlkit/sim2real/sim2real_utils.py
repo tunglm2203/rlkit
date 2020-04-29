@@ -124,11 +124,23 @@ def set_env_state_sim2sim(src, target, set_goal=False):
     from multiworld.core.image_env import ImageEnv
     if isinstance(src, ImageEnv) and isinstance(target, ImageEnv):
         if set_goal:
+            """ New method to set state, only possible in Mujoco Environment
+            """
             env_state = src.wrapped_env.get_env_state()
             src.wrapped_env.set_to_goal(src.wrapped_env.get_goal())
             env_state_ = src.wrapped_env.get_env_state()
             target.wrapped_env.set_env_state(env_state_)
             src.wrapped_env.set_env_state(env_state)
+            """ Old method to set state, possible in Real and Gazebo
+            """
+            # goals = src.wrapped_env.get_goal()
+            # obj_pos = goals['state_desired_goal'][2:]
+            # ee_pos = goals['state_desired_goal'][:2]
+            # target.wrapped_env._goal_xyxy = np.zeros(4)
+            # target.wrapped_env._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
+            # target.wrapped_env._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
+            # target.set_goal_xyxy(target._goal_xyxy)
+            # target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
         else:
             """ New method to set state, only possible in Mujoco Environment
             """
@@ -137,8 +149,8 @@ def set_env_state_sim2sim(src, target, set_goal=False):
             # Set state
             target.wrapped_env.set_env_state(env_state)
 
-            # """ Old method to set state, possible in Real and Gazebo
-            # """
+            """ Old method to set state, possible in Real and Gazebo
+            """
             # # Get coordinate real
             # ee_pos = src.wrapped_env.get_endeff_pos()
             # obj_pos = src.wrapped_env.get_puck_pos()
@@ -147,7 +159,7 @@ def set_env_state_sim2sim(src, target, set_goal=False):
             # target.wrapped_env._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
             # target.wrapped_env._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
             # target.set_goal_xyxy(target._goal_xyxy)
-            # target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
+            target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
     else:
         print('[AIM-ERROR] Only support ImageEnv, this is {}'.format(type(src)))
         exit()
