@@ -2,13 +2,14 @@ import argparse
 from subprocess import Popen, PIPE, STDOUT
 import glob
 import os
+import time
 
 # ===== User arguments =====
 parser = argparse.ArgumentParser()
 parser.add_argument('--vae', type=str, default=None)
 parser.add_argument('--enable_render', action='store_true')
 
-parser.add_argument('--result_path', type=str, default='results')
+parser.add_argument('--result_path', type=str, default='results_10000rand_1000pair')
 parser.add_argument('--n_test', type=int, default=5)
 parser.add_argument('--exp', type=str, default='')
 args = parser.parse_args()
@@ -36,29 +37,12 @@ def main():
          '--vae', vae_ckpt, '--exp', args.exp + '-' + vae_ckpt.split('-')[-1]] for vae_ckpt in vae_ckpt_list]
 
     # ===== Running parallel =====
-    # procs = Popen(cmds_list[0], stdout=PIPE, stderr=PIPE)
-    # procs.wait()
-    # while True:
-    #     output = procs.stdout.readline()
-    #     if output == '' and procs.poll() is not None:
-    #         break
-    #     if output:
-    #         print(output.strip())
-
+    start = time.time()
     procs_list = [Popen(cmd, stdout=PIPE, stderr=PIPE) for cmd in cmds_list]
-    n_procs, proc_cnt = len(procs_list), 0
     print('Running all experiments...')
     for proc in procs_list:
         proc.wait()
-        # proc_cnt += 1
-        # if proc_cnt == n_procs - 1:
-        #     while True:
-        #         output = proc.stdout.readline()
-        #         if output == '' and proc.poll() is not None:
-        #             break
-        #         if output:
-        #             print(output.strip())
-    print('Complete running all experiments.')
+    print('Complete running all experiments: {}(s)'.format(time.time() - start))
 
 
 if __name__ == '__main__':

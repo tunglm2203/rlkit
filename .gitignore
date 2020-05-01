@@ -34,3 +34,11 @@ tester/rand_sim.1000/
 tester/random_images_real.4000/
 tester/random_images_sim.4000/
 *.npz
+*.500
+*.1000
+*.2000
+*.3000
+*.4000
+*.5000
+*.10000
+
