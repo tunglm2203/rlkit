@@ -265,3 +265,71 @@ def pairwise_loss_schedule(value, epoch):
         return 0.0
     else:
         return value
+
+
+def vae_da_loss_schedule_v1(epoch, step, vae_loss_opt, da_loss_opt):
+    """
+    Used for VAE & consistency loss
+    """
+    _vae_loss_opt = vae_loss_opt.copy()
+    _da_loss_opt = da_loss_opt.copy()
+    if epoch < step:
+        _vae_loss_opt['alpha0'] = 1.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 0.0 * da_loss_opt['alpha1']
+    else:
+        _vae_loss_opt['alpha0'] = 1.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 1.0 * da_loss_opt['alpha1']
+    return _vae_loss_opt, _da_loss_opt
+
+
+def vae_da_loss_schedule_v2(epoch, step, vae_loss_opt, da_loss_opt):
+    """
+    Used for VAE & consistency loss
+    """
+    _vae_loss_opt = vae_loss_opt.copy()
+    _da_loss_opt = da_loss_opt.copy()
+    if epoch < step:
+        _vae_loss_opt['alpha0'] = 1.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 0.0 * da_loss_opt['alpha1']
+    else:
+        _vae_loss_opt['alpha0'] = 0.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 1.0 * da_loss_opt['alpha1']
+    return _vae_loss_opt, _da_loss_opt
+
+
+def vae_da_loss_schedule_v3(epoch, step, vae_loss_opt, da_loss_opt):
+    """
+    Used for VAE & consistency w/ cycle loss
+    """
+    _vae_loss_opt = vae_loss_opt.copy()
+    _da_loss_opt = da_loss_opt.copy()
+    if epoch < step:
+        _vae_loss_opt['alpha0'] = 1.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 0.0 * da_loss_opt['alpha1']
+        _da_loss_opt['alpha2'] = 0.0 * da_loss_opt['alpha2']
+        _da_loss_opt['alpha3'] = 0.0 * da_loss_opt['alpha3']
+    else:
+        _vae_loss_opt['alpha0'] = 1.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 1.0 * da_loss_opt['alpha1']
+        _da_loss_opt['alpha2'] = 1.0 * da_loss_opt['alpha2']
+        _da_loss_opt['alpha3'] = 1.0 * da_loss_opt['alpha3']
+    return _vae_loss_opt, _da_loss_opt
+
+
+def vae_da_loss_schedule_v4(epoch, step, vae_loss_opt, da_loss_opt):
+    """
+    Used for VAE & consistency w/ cycle loss
+    """
+    _vae_loss_opt = vae_loss_opt.copy()
+    _da_loss_opt = da_loss_opt.copy()
+    if epoch < step:
+        _vae_loss_opt['alpha0'] = 1.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 0.0 * da_loss_opt['alpha1']
+        _da_loss_opt['alpha2'] = 0.0 * da_loss_opt['alpha2']
+        _da_loss_opt['alpha3'] = 0.0 * da_loss_opt['alpha3']
+    else:
+        _vae_loss_opt['alpha0'] = 0.0 * vae_loss_opt['alpha0']
+        _da_loss_opt['alpha1'] = 1.0 * da_loss_opt['alpha1']
+        _da_loss_opt['alpha2'] = 1.0 * da_loss_opt['alpha2']
+        _da_loss_opt['alpha3'] = 1.0 * da_loss_opt['alpha3']
+    return _vae_loss_opt, _da_loss_opt
