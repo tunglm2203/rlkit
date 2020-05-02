@@ -62,7 +62,8 @@ def consistency_loss(pair_sim, pair_real, sim_vae, real_vae, opt):
 
 
 def consistency_loss_w_cycle(pair_sim, pair_real, sim_vae, real_vae, opt):
-    ctc_latent_cross = True
+    ctc_latent_cross = opt.get('ctc_latent_cross', True)
+    use_mu = opt.get('use_mu', False)
     alpha1 = opt.get('alpha1', 0)
     alpha2 = opt.get('alpha2', 0)
     alpha3 = opt.get('alpha3', 0)
@@ -70,10 +71,18 @@ def consistency_loss_w_cycle(pair_sim, pair_real, sim_vae, real_vae, opt):
     assert f_distance is not None, 'Must specify the distance function'
     # ============== Consitency loss of image ==============
     latent_params_sim = sim_vae.encode(pair_sim)
-    _, rec_params_real = real_vae.decode(latent_params_sim[0])
+    if use_mu:
+        _, rec_params_real = real_vae.decode(latent_params_sim[0])
+    else:
+        latents_sim = sim_vae.reparameterize(latent_params_sim)
+        _, rec_params_real = real_vae.decode(latents_sim)
 
     latent_params_real = real_vae.encode(pair_real)
-    _, rec_params_sim = sim_vae.decode(latent_params_real[0])
+    if use_mu:
+        _, rec_params_sim = sim_vae.decode(latent_params_real[0])
+    else:
+        latents_real = real_vae.reparameterize(latent_params_real)
+        _, rec_params_sim = sim_vae.decode(latents_real)
 
     ctc_sim2real = f_distance(pair_real, rec_params_real[0], imlength=real_vae.imlength)
     ctc_real2sim = f_distance(pair_sim, rec_params_sim[0], imlength=real_vae.imlength)
