@@ -159,7 +159,7 @@ def set_env_state_sim2sim(src, target, set_goal=False):
             # target.wrapped_env._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
             # target.wrapped_env._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
             # target.set_goal_xyxy(target._goal_xyxy)
-            target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
+            # target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
     else:
         print('[AIM-ERROR] Only support ImageEnv, this is {}'.format(type(src)))
         exit()
@@ -180,21 +180,26 @@ def set_env_state_real2sim(src, target, set_goal=False):
     """
     from multiworld.core.image_env import ImageEnv
     if isinstance(src, ImageEnv) and isinstance(target, ImageEnv):
-        # Get coordinate real
-        ee_pos = src.wrapped_env._get_endeffector_pose()
-        obj_pos = src.wrapped_env.get_obj_pos_in_gazebo('cylinder')
+        if set_goal:
+            goals = src.wrapped_env.get_goal()
+            ee_pos = goals['state_desired_goal'][2:]
+            obj_pos = goals['state_desired_goal'][:2]
+        else:
+            # Get coordinate real
+            ee_pos = src.wrapped_env._get_endeffector_pose()
+            obj_pos = src.wrapped_env.get_obj_pos_in_gazebo('cylinder')
+
         # Make the coordinate of Mujoco
-        target._goal_xyxy = np.zeros(4)
-        target._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
-        target._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
-        target.set_goal_xyxy(target._goal_xyxy)
+        target.wrapped_env._goal_xyxy = np.zeros(4)
+        target.wrapped_env._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
+        target.wrapped_env._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
+        target.wrapped_env.set_goal_xyxy(target.wrapped_env._goal_xyxy)
         # target.reset_mocap_welds()
         # target._get_obs()
         target.wrapped_env.set_to_goal(target.wrapped_env.get_goal())
     else:
         print('[AIM-ERROR] Only support ImageEnv, this is {}'.format(type(src)))
         exit()
-    pass
 
 
 def set_env_state_sim2real():
