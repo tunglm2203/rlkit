@@ -15,6 +15,7 @@ from rlkit.core import logger
 from rlkit.core.logging import MyEncoder
 from rlkit.torch import pytorch_util as ptu
 from rlkit.torch.vae.conv_vae import (ConvVAE,)
+from rlkit.sim2real.sim2real_losses import *
 
 
 def create_target_encoder(vae_kwargs, representation_size, decoder_activation):
@@ -338,3 +339,63 @@ def vae_da_loss_schedule_v4(epoch, step, vae_loss_opt, da_loss_opt):
         _da_loss_opt['alpha2'] = 1.0 * da_loss_opt['alpha2']
         _da_loss_opt['alpha3'] = 1.0 * da_loss_opt['alpha3']
     return _vae_loss_opt, _da_loss_opt
+
+
+def vae_loss_option(vae_loss_opt):
+    loss_type = vae_loss_opt.get('loss_type', None)
+    if loss_type == 'beta_vae_loss':
+        return vae_loss
+    elif loss_type == 'beta_vae_loss_rm_rec':
+        return vae_loss_rm_rec
+    elif loss_type == 'beta_vae_loss_stop_grad_dec':
+        return vae_loss_stop_grad_dec
+    else:
+        raise NotImplementedError('VAE loss {} not supported'.format(loss_type))
+
+
+def da_loss_option(da_loss_opt):
+    loss_type = da_loss_opt.get('loss_type', None)
+    if loss_type == 'consistency_loss':
+        return consistency_loss
+    elif loss_type == 'consistency_loss_w_cycle':
+        return consistency_loss_w_cycle
+    elif loss_type == 'consistency_loss_rm_dec_path':
+        return consistency_loss_rm_dec_path
+    else:
+        raise NotImplementedError('DA loss {} not supported'.format(loss_type))
+
+
+def create_vae_wrapped_env(env_name, vae, imsize=48, init_camera=None):
+    import gym
+    from multiworld.core.image_env import ImageEnv
+    import multiworld
+    from rlkit.envs.vae_wrapper import VAEWrappedEnv
+    multiworld.register_all_envs()
+
+    env = gym.make(env_name)
+    image_env = ImageEnv(env,
+                         imsize=imsize,
+                         normalize=True,
+                         transpose=True,
+                         init_camera=init_camera,
+                         )
+    # TUNG: ====== Hard code: clone from configuration of data_ckpt['evaluation/env']
+    render = False
+    reward_params = dict(
+        type='latent_distance',
+    )
+
+    vae_env = VAEWrappedEnv(
+        image_env,
+        vae,
+        imsize=image_env.imsize,
+        decode_goals=render,
+        render_goals=render,
+        render_rollouts=render,
+        reward_params=reward_params,
+    )
+
+    # TUNG: Using a goal sampled from environment
+    vae_env.wrapped_env.wrapped_env.randomize_goals = False  # Setup Mujoco env
+    vae_env._goal_sampling_mode = 'reset_of_env'             # Setup VAE env
+    return vae_env

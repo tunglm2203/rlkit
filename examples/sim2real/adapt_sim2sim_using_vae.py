@@ -9,11 +9,14 @@ import torch
 import torch.nn.functional as F
 from torch import optim
 import torch.optim.lr_scheduler as lr_scheduler
+from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in_aim_v1
 
 from rlkit.torch.vae.conv_vae import imsize48_default_architecture
 from rlkit.pythonplusplus import identity
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.sim2real.sim2real_utils import *
+from rlkit.sim2real.goal_test import set_of_goals
+from rlkit.samplers.rollout_functions import multitask_rollout_sim2real
 
 
 def start_epoch(n_train_data, learning_rate_scheduler=None):
@@ -27,10 +30,10 @@ def start_epoch(n_train_data, learning_rate_scheduler=None):
 def end_epoch(tgt_net, src_net,
               rand_data_real_eval, rand_data_sim_eval, pair_data_real_eval, pair_data_sim_eval,
               statistics, tb, variant, save_path, epoch,
-              losses, log_probs, kles, pair_losses):
+              losses, log_probs, kles, pair_losses, test_env, policy):
     # ============== Test for debugging VAE ==============
     tgt_net.eval()
-    debug_batch_size = 64
+    debug_batch_size = 32
     idx = np.random.randint(0, len(rand_data_real_eval), variant['batch_size'])
     images = ptu.from_numpy(rand_data_real_eval[idx])
     reconstructions, _, _ = tgt_net(images)
@@ -58,6 +61,12 @@ def end_epoch(tgt_net, src_net,
         latent_pair_loss.append(eval_loss.item())
     # ========= Test for debugging pairwise data =========
 
+    # ========= Test adapted VAE in target domain env =========
+    if variant['test_opt']['test_enable'] and \
+            (epoch % variant['test_opt']['period'] == 0 or epoch == variant['n_epochs'] - 1):
+        ob_dist_mean, ob_dist_std, ee_dist_mean, ee_dist_std = \
+            rollout_pusher(variant, policy, test_env)
+
     stats = create_stats_ordered_dict('debug/MSE improvement over random', mse_improvement)
     stats.update(create_stats_ordered_dict('debug/MSE of random decoding',
                                            ptu.get_numpy(random_mses)))
@@ -84,178 +93,46 @@ def end_epoch(tgt_net, src_net,
     tb.add_scalar('train/loss', np.mean(losses), epoch)
     tb.add_scalar('train/pair_loss', np.mean(pair_losses), epoch)
     tb.add_scalar('eval/pair_loss', np.mean(latent_pair_loss), epoch)
+    if variant['test_opt']['test_enable'] and \
+            (epoch % variant['test_opt']['period'] == 0 or epoch == variant['n_epochs'] - 1):
+        tb.add_scalar('eval/puck_distance (mean)', ob_dist_mean, epoch)
+        tb.add_scalar('eval/puck_distance (std)', ob_dist_mean, epoch)
+        tb.add_scalar('eval/hand_distance (mean)', ee_dist_mean, epoch)
+        tb.add_scalar('eval/hand_distance (std)', ee_dist_std, epoch)
+
     for key, value in stats.items():
         tb.add_scalar(key, value, epoch)
 
 
-def vae_loss(vae, batch_data, opt):
-    beta = opt.get('beta', 0)
-    # _, tgt_obs_distr_params, tgt_latent_distr_param = vae(batch_data)
-    tgt_latent_distr_param = vae.encode(batch_data)
-    latents = vae.reparameterize(tgt_latent_distr_param)
-    _, tgt_obs_distr_params = vae.decode(latents)
-    log_prob = vae.logprob(batch_data, tgt_obs_distr_params)
-    kle = vae.kl_divergence(tgt_latent_distr_param)
-    loss = -1 * log_prob + beta * kle
-    return loss, log_prob, kle
+def rollout_pusher(variant, policy, env):
+    n_goals = len(set_of_goals)
+    final_puck_distance = np.zeros((n_goals, variant['test_opt']['n_test']))
+    final_hand_distance = np.zeros_like(final_puck_distance)
+    print('[INFO] Starting test in set of goals...')
+    for goal_id in tqdm(range(n_goals)):
+        # Assign goal from set of goals
+        env.wrapped_env.wrapped_env.fixed_hand_goal = set_of_goals[goal_id][0]
+        env.wrapped_env.wrapped_env.fixed_puck_goal = set_of_goals[goal_id][1]
 
+        # Number of test per each goal
+        paths_per_goal = []
+        for i in range(variant['test_opt']['n_test']):
+            paths_per_goal.append(multitask_rollout_sim2real(
+                env,
+                policy,
+                max_path_length=variant['test_opt']['H'],
+                render=not variant['test_opt']['hide'],
+                observation_key='observation',
+                desired_goal_key='desired_goal',
+            ))
+            final_puck_distance[goal_id, i] = paths_per_goal[i]['env_infos'][-1]['puck_distance']
+            final_hand_distance[goal_id, i] = paths_per_goal[i]['env_infos'][-1]['hand_distance']
 
-def vae_loss_rm_rec(vae, batch_data, opt):
-    beta = opt.get('beta', 0)
-    log_prob = torch.FloatTensor(([0.0]))
-    _, tgt_obs_distr_params, tgt_latent_distr_param = vae(batch_data)
-    # log_prob = vae.logprob(batch_data, tgt_obs_distr_params)
-    kle = vae.kl_divergence(tgt_latent_distr_param)
-    loss = beta * kle
-    return loss, log_prob, kle
-
-
-def vae_loss_stop_grad_dec(vae, batch_data, opt):
-    beta = opt.get('beta', 0)
-    # _, tgt_obs_distr_params, tgt_latent_distr_param = vae(batch_data)
-    tgt_latent_distr_param = vae.encode(batch_data)
-    latents = vae.reparameterize(tgt_latent_distr_param)
-    with torch.no_grad():
-        _, tgt_obs_distr_params = vae.decode(latents)
-
-    log_prob = vae.logprob(batch_data, tgt_obs_distr_params)
-    kle = vae.kl_divergence(tgt_latent_distr_param)
-    loss = -1 * log_prob + beta * kle
-    return loss, log_prob, kle
-
-
-def consistency_loss(pair_sim, pair_real, sim_vae, real_vae, opt):
-    use_mu = opt.get('use_mu', False)
-    alpha1 = opt.get('alpha1', 0)
-
-    f_distance = opt.get('distance', None)
-    assert f_distance is not None, 'Must specify the distance function'
-
-    latent_distribution_params_sim = sim_vae.encode(pair_sim)
-    if use_mu:
-        _, obs_distribution_params_real = real_vae.decode(latent_distribution_params_sim[0])
-    else:
-        latents_sim = sim_vae.reparameterize(latent_distribution_params_sim)
-        _, obs_distribution_params_real = real_vae.decode(latents_sim)
-
-    latent_distribution_params_real = real_vae.encode(pair_real)
-    if use_mu:
-        _, obs_distribution_params_sim = sim_vae.decode(latent_distribution_params_real[0])
-    else:
-        latents_real = real_vae.reparameterize(latent_distribution_params_real)
-        _, obs_distribution_params_sim = sim_vae.decode(latents_real)
-
-    # ctc_sim2real = real_vae.logprob(pair_real, obs_distribution_params_real)
-    # ctc_real2sim = sim_vae.logprob(pair_sim, obs_distribution_params_sim)
-    ctc_sim2real = f_distance(pair_real, obs_distribution_params_real[0])
-    ctc_real2sim = f_distance(pair_sim, obs_distribution_params_sim[0])
-    return alpha1 * (ctc_sim2real + ctc_real2sim)
-
-
-def consistency_loss_w_cycle(pair_sim, pair_real, sim_vae, real_vae, opt):
-    ctc_latent_cross = True
-    alpha1 = opt.get('alpha1', 0)
-    alpha2 = opt.get('alpha2', 0)
-    alpha3 = opt.get('alpha3', 0)
-    f_distance = opt.get('distance', None)
-    assert f_distance is not None, 'Must specify the distance function'
-    # ============== Consitency loss of image ==============
-    latent_params_sim = sim_vae.encode(pair_sim)
-    _, rec_params_real = real_vae.decode(latent_params_sim[0])
-
-    latent_params_real = real_vae.encode(pair_real)
-    _, rec_params_sim = sim_vae.decode(latent_params_real[0])
-
-    ctc_sim2real = f_distance(pair_real, rec_params_real[0], imlength=real_vae.imlength)
-    ctc_real2sim = f_distance(pair_sim, rec_params_sim[0], imlength=real_vae.imlength)
-    ctc_total = ctc_sim2real + ctc_real2sim
-
-    # ============== Cycle loss of image ==============
-    rec_latent_params_real = real_vae.encode(rec_params_real[0].detach())
-    _, rec_params_sim_2 = sim_vae.decode(rec_latent_params_real[0])
-
-    rec_latent_params_sim = sim_vae.encode(rec_params_sim[0].detach())
-    _, rec_params_real_2 = real_vae.decode(rec_latent_params_sim[0])
-
-    cycle_sim2sim = f_distance(pair_sim, rec_params_sim_2[0])
-    cycle_real2real = f_distance(pair_real, rec_params_real_2[0])
-    cycle_total = cycle_sim2sim + cycle_real2real
-
-    # ============== Consitency loss of latent ==============
-    _, rec_params_real_hat = real_vae.decode(latent_params_sim[0].detach())
-    latent_params_real_hat = real_vae.encode(rec_params_real_hat[0])
-    if ctc_latent_cross:
-        ctc_latent_sim2real = f_distance(latent_params_real[0].detach(), latent_params_real_hat[0])
-    else:
-        ctc_latent_sim2sim = f_distance(latent_params_sim[0].detach(), latent_params_real_hat[0])
-
-    _, obs_params_sim_hat = sim_vae.decode(latent_params_real[0].detach())
-    latent_params_sim_hat = sim_vae.encode(obs_params_sim_hat[0])
-    if ctc_latent_cross:
-        ctc_latent_real2sim = f_distance(latent_params_sim[0].detach(), latent_params_sim_hat[0])
-    else:
-        ctc_latent_real2real = f_distance(latent_params_real[0].detach(), latent_params_sim_hat[0])
-
-    if ctc_latent_cross:
-        ctc_latent_total = ctc_latent_sim2real + ctc_latent_real2sim
-    else:
-        ctc_latent_total = ctc_latent_sim2sim + ctc_latent_real2real
-
-    total_loss = alpha1 * ctc_total + alpha2 * cycle_total + alpha3 * ctc_latent_total
-    return total_loss
-
-
-def consistency_loss_rm_dec_path(pair_sim, pair_real, sim_vae, real_vae, opt):
-    use_mu = opt.get('use_mu', False)
-    # latent_distribution_params_sim = sim_vae.encode(pair_sim)
-    # if use_mu:
-    #     _, obs_distribution_params_real = real_vae.decode(latent_distribution_params_sim[0])
-    # else:
-    #     latents_sim = sim_vae.reparameterize(latent_distribution_params_sim)
-    #     _, obs_distribution_params_real = real_vae.decode(latents_sim)
-
-    latent_distribution_params_real = real_vae.encode(pair_real)
-    if use_mu:
-        _, obs_distribution_params_sim = sim_vae.decode(latent_distribution_params_real[0])
-    else:
-        latents_real = real_vae.reparameterize(latent_distribution_params_real)
-        _, obs_distribution_params_sim = sim_vae.decode(latents_real)
-
-    # ctc_sim2real = real_vae.logprob(pair_real, obs_distribution_params_real)
-    ctc_real2sim = sim_vae.logprob(pair_sim, obs_distribution_params_sim)
-    # return -1 * (ctc_sim2real + ctc_real2sim)
-    return -1 * ctc_real2sim
-
-
-def mse_pair(pair_sim, pair_real, sim_vae, real_vae):
-    src_latent_mean, _ = sim_vae.encode(pair_sim)
-    tgt_latent_mean, _ = real_vae.encode(pair_real)
-    loss = F.mse_loss(tgt_latent_mean, src_latent_mean)
-    return loss
-
-
-def vae_loss_option(vae_loss_opt):
-    loss_type = vae_loss_opt.get('loss_type', None)
-    if loss_type == 'beta_vae_loss':
-        return vae_loss
-    elif loss_type == 'beta_vae_loss_rm_rec':
-        return vae_loss_rm_rec
-    elif loss_type == 'beta_vae_loss_stop_grad_dec':
-        return vae_loss_stop_grad_dec
-    else:
-        raise NotImplementedError('VAE loss {} not supported'.format(loss_type))
-
-
-def da_loss_option(da_loss_opt):
-    loss_type = da_loss_opt.get('loss_type', None)
-    if loss_type == 'consistency_loss':
-        return consistency_loss
-    elif loss_type == 'consistency_loss_w_cycle':
-        return consistency_loss_w_cycle
-    elif loss_type == 'consistency_loss_rm_dec_path':
-        return consistency_loss_rm_dec_path
-    else:
-        raise NotImplementedError('DA loss {} not supported'.format(loss_type))
+    ob_dist_mean = final_puck_distance.mean()
+    ob_dist_std = final_puck_distance.mean(axis=0).std()
+    ee_dist_mean = final_hand_distance.mean()
+    ee_dist_std = final_hand_distance.mean(axis=0).std()
+    return ob_dist_mean, ob_dist_std, ee_dist_mean, ee_dist_std
 
 
 def main(args):
@@ -269,11 +146,16 @@ def main(args):
     variant = dict(
         seed=None,
         path_to_data='/mnt/hdd/tung/workspace/rlkit/tester',
-        rand_src_dir='rand_img_sim_tgt.10000',
-        rand_tgt_dir='rand_img_sim_tgt.10000',
-        pair_src_dir='rand_pair_sim_src.1000',
-        pair_tgt_dir='rand_pair_sim_tgt.1000',
-        test_ratio=0.2,
+        rand_src_dir='rand_img_sim_tgt_new.10000',
+        rand_tgt_dir='rand_img_sim_tgt_new.10000',
+
+        # pair_src_dir='randlarger_pair_sim_src.1000',
+        # pair_tgt_dir='randlarger_pair_sim_tgt.1000',
+        # pair_src_dir='randlarger_pair_sim_src.2000',
+        # pair_tgt_dir='randlarger_pair_sim_tgt.2000',
+        pair_src_dir='randlarger_pair_sim_src.3000',
+        pair_tgt_dir='randlarger_pair_sim_tgt.3000',
+        test_ratio=0.1,
         vae_kwargs=dict(
             input_channels=3,
             architecture=imsize48_default_architecture,
@@ -283,11 +165,12 @@ def main(args):
         ),
         decoder_activation=identity,
         representation_size=4,
-        # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt',
-        default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_new_data',
+        # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_1000pair/',
+        # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_2000pair/',
+        default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_3000pair/',
         beta=20,
 
-        # TUNG: Change below
+        # TUNG: REGION FOR TRAINING
         vae_loss_opt=dict(
             loss_type='beta_vae_loss',
             # vae_loss='beta_vae_loss_rm_rec',
@@ -295,26 +178,41 @@ def main(args):
             beta=20,
         ),
         da_loss_opt=dict(
-            # loss_type='consistency_loss',
-            loss_type='consistency_loss_w_cycle',
+            loss_type='consistency_loss',
+            # loss_type='consistency_loss_w_cycle',
             # loss_type='consistency_loss_rm_dec_path',
 
-            # distance=mse_loss,
-            distance=l1_loss,
-            # distance=huber_loss,
+            ctc_latent_cross=False,
 
             alpha1=1.0,
-            alpha2=1.0,
-            alpha3=1.0,
-            use_mu=True
+            alpha2=0.0,
+            alpha3=0.0,
+
+            use_mu=False,
+
+            distance=mse_loss,
+            # distance=l1_loss,
+            # distance=huber_loss,
         ),
+        init_tgt_by_src=True,
+        alpha0=1.0,
 
         n_epochs=2000,
         step1=10000,  # Step to decay learning rate
         batch_size=50,
         lr=1e-3,
 
-        init_tgt_by_src=False
+        # TUNG: REGION FOR TESTING
+        test_opt=dict(
+            test_enable=True,
+            period=50,
+            env_name='SawyerPushNIPSCustomEasy-v0',
+            imsize=48,
+            init_camera=sawyer_init_camera_zoomed_in_aim_v1,
+            n_test=2,
+            H=50,
+            hide=True
+        )
     )
     if args.seed is None:
         variant['seed'] = random.randint(0, 100000)
@@ -330,10 +228,8 @@ def main(args):
                                variant['rand_src_dir'], variant['rand_tgt_dir'],
                                variant['pair_src_dir'], variant['pair_tgt_dir'],
                                test_ratio=variant['test_ratio'])
-    print('No. of random train data: Sim={}, Real={}'.format(len(rand_src_train),
-                                                             len(rand_tgt_train)))
-    print('No. of pair train data: Sim={}, Real={}'.format(len(pair_src_train),
-                                                           len(pair_tgt_train)))
+    print('Rand train data: Sim={}, Real={}'.format(len(rand_src_train), len(rand_tgt_train)))
+    print('Pair train data: Sim={}, Real={}'.format(len(pair_src_train), len(pair_tgt_train)))
 
     ##########################
     #       Load models      #
@@ -341,6 +237,7 @@ def main(args):
     print('[INFO] Loading checkpoint...')
     data = torch.load(open(args.file, "rb"))
     env = data['evaluation/env']
+    policy = data['evaluation/policy']
     src_vae = env.vae
 
     tgt_vae = create_target_encoder(variant['vae_kwargs'],
@@ -351,6 +248,12 @@ def main(args):
 
     if variant['init_tgt_by_src']:
         tgt_vae.load_state_dict(src_vae.state_dict())
+
+    # Setup for testing
+    test_env = create_vae_wrapped_env(env_name=variant['test_opt']['env_name'],
+                                      vae=tgt_vae,
+                                      imsize=variant['test_opt']['imsize'],
+                                      init_camera=variant['test_opt']['init_camera'])
 
     # Setup criterion and optimizer
     params = tgt_vae.parameters()
@@ -388,7 +291,7 @@ def main(args):
             # Pairwise loss
             pair_loss = daloss(pair_img_src, pair_img_tgt, src_vae, tgt_vae, variant['da_loss_opt'])
 
-            loss = total_vae_loss + pair_loss
+            loss = variant['alpha0'] * total_vae_loss + pair_loss
             loss.backward()
 
             losses.append(loss.item())
@@ -403,7 +306,8 @@ def main(args):
                   pair_data_real_eval=pair_tgt_eval, pair_data_sim_eval=pair_src_eval,
                   statistics=eval_statistics, tb=tensor_board,
                   variant=variant, save_path=ckpt_path, epoch=epoch,
-                  losses=losses, log_probs=log_probs, kles=kles, pair_losses=pair_losses)
+                  losses=losses, log_probs=log_probs, kles=kles, pair_losses=pair_losses,
+                  test_env=test_env, policy=policy)
 
 
 parser = argparse.ArgumentParser()
