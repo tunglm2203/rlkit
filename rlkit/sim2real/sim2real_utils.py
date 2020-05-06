@@ -34,7 +34,8 @@ def create_target_encoder(vae_kwargs, representation_size, decoder_activation):
 def load_all_required_data(path='', rand_src_dir=None, rand_tgt_dir=None,
                            pair_src_dir=None, pair_tgt_dir=None,
                            file_format='*.npz',
-                           test_ratio=0.1, seed=0):
+                           test_ratio=0.1, seed=0,
+                           merge_rand_pair_tgt=False):
     rand_sim_train, rand_real_train, rand_sim_eval, rand_real_eval = None, None, None, None
     if rand_src_dir is not None:
         rand_data_sim = load_data(os.path.join(path, rand_src_dir), file_format)
@@ -42,6 +43,11 @@ def load_all_required_data(path='', rand_src_dir=None, rand_tgt_dir=None,
         rand_data_real = load_data(os.path.join(path, rand_tgt_dir), file_format)
     pair_data_sim = load_data(os.path.join(path, pair_src_dir), file_format)
     pair_data_real = load_data(os.path.join(path, pair_tgt_dir), file_format)
+
+    if merge_rand_pair_tgt and rand_tgt_dir is not None:
+        rand_data_real = np.concatenate((rand_data_real, pair_data_real), axis=0)
+    if merge_rand_pair_tgt and rand_src_dir is not None:
+        rand_data_sim = np.concatenate((rand_data_sim, pair_data_sim), axis=0)
 
     if rand_src_dir is not None and rand_tgt_dir is not None:
         assert len(rand_data_sim) == len(rand_data_real), \
