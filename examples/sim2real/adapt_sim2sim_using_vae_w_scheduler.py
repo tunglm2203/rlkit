@@ -9,108 +9,11 @@ import torch
 import torch.nn.functional as F
 from torch import optim
 import torch.optim.lr_scheduler as lr_scheduler
+from multiworld.envs.mujoco.cameras import sawyer_init_camera_zoomed_in_aim_v1
 
 from rlkit.torch.vae.conv_vae import imsize48_default_architecture
 from rlkit.pythonplusplus import identity
-from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.sim2real.sim2real_utils import *
-from rlkit.sim2real.sim2real_losses import *
-
-
-def start_epoch(n_train_data, learning_rate_scheduler=None):
-    losses, log_probs, kles, pair_losses = [], [], [], []
-    idxes = np.random.permutation(n_train_data)
-    if learning_rate_scheduler is not None:
-        learning_rate_scheduler.step()
-    return (losses, log_probs, kles, pair_losses), idxes
-
-
-def end_epoch(tgt_net, src_net,
-              rand_data_real_eval, rand_data_sim_eval, pair_data_real_eval, pair_data_sim_eval,
-              statistics, tb, variant, save_path, epoch,
-              losses, log_probs, kles, pair_losses):
-    # ============== Test for debugging VAE ==============
-    tgt_net.eval()
-    debug_batch_size = 64
-    idx = np.random.randint(0, len(rand_data_real_eval), variant['batch_size'])
-    images = ptu.from_numpy(rand_data_real_eval[idx])
-    reconstructions, _, _ = tgt_net(images)
-    img = images[0]
-
-    recon_mse = ((reconstructions[0] - img) ** 2).mean().view(-1)
-    img_repeated = img.expand((debug_batch_size, img.shape[0]))
-
-    samples = ptu.randn(debug_batch_size, variant['representation_size'])
-    random_imgs, _ = tgt_net.decode(samples)
-    random_mses = (random_imgs - img_repeated) ** 2
-    mse_improvement = ptu.get_numpy(random_mses.mean(dim=1) - recon_mse)
-    # ============== Test for debugging VAE ==============
-
-    # ========= Test for debugging pairwise data =========
-    eval_batch_size = 100
-    idxes = np.arange(len(pair_data_real_eval))
-    latent_pair_loss = []
-    for b in range(len(pair_data_real_eval) // eval_batch_size):
-        eval_sim = get_batch(pair_data_sim_eval, b, idxes, eval_batch_size)
-        eval_real = get_batch(pair_data_real_eval, b, idxes, eval_batch_size)
-        latent_sim, _ = src_net.encode(eval_sim)
-        latent_real, _ = tgt_net.encode(eval_real)
-        eval_loss = F.mse_loss(latent_real, latent_sim)
-        latent_pair_loss.append(eval_loss.item())
-    # ========= Test for debugging pairwise data =========
-
-    stats = create_stats_ordered_dict('debug/MSE improvement over random', mse_improvement)
-    stats.update(create_stats_ordered_dict('debug/MSE of random decoding',
-                                           ptu.get_numpy(random_mses)))
-    stats['debug/MSE of reconstruction'] = ptu.get_numpy(recon_mse)[0]
-    save_dict = {
-        'epoch': epoch,
-        'model': tgt_net.state_dict()
-    }
-    torch.save(save_dict, os.path.join(save_path, 'vae_ckpt.pth'))
-
-    statistics['train/Log Prob'] = np.mean(log_probs)
-    statistics['train/KL'] = np.mean(kles)
-    statistics['train/loss'] = np.mean(losses)
-    statistics['train/pair_loss'] = np.mean(pair_losses)
-    statistics['eval/pair_loss'] = np.mean(latent_pair_loss)
-    for key, value in stats.items():
-        statistics[key] = value
-    for k, v in statistics.items():
-        logger.record_tabular(k, v)
-    logger.dump_tabular()
-
-    tb.add_scalar('train/log_prob', np.mean(log_probs), epoch)
-    tb.add_scalar('train/KL', np.mean(kles), epoch)
-    tb.add_scalar('train/loss', np.mean(losses), epoch)
-    tb.add_scalar('train/pair_loss', np.mean(pair_losses), epoch)
-    tb.add_scalar('eval/pair_loss', np.mean(latent_pair_loss), epoch)
-    for key, value in stats.items():
-        tb.add_scalar(key, value, epoch)
-
-
-def vae_loss_option(vae_loss_opt):
-    loss_type = vae_loss_opt.get('loss_type', None)
-    if loss_type == 'beta_vae_loss':
-        return vae_loss
-    elif loss_type == 'beta_vae_loss_rm_rec':
-        return vae_loss_rm_rec
-    elif loss_type == 'beta_vae_loss_stop_grad_dec':
-        return vae_loss_stop_grad_dec
-    else:
-        raise NotImplementedError('VAE loss {} not supported'.format(loss_type))
-
-
-def da_loss_option(da_loss_opt):
-    loss_type = da_loss_opt.get('loss_type', None)
-    if loss_type == 'consistency_loss':
-        return consistency_loss
-    elif loss_type == 'consistency_loss_w_cycle':
-        return consistency_loss_w_cycle
-    elif loss_type == 'consistency_loss_rm_dec_path':
-        return consistency_loss_rm_dec_path
-    else:
-        raise NotImplementedError('DA loss {} not supported'.format(loss_type))
 
 
 def main(args):
@@ -135,8 +38,8 @@ def main(args):
         vae_kwargs=dict(
             input_channels=3,
             architecture=imsize48_default_architecture,
-            # decoder_distribution='gaussian_identity_variance',
-            decoder_distribution='laplace_identity_variance',
+            decoder_distribution='gaussian_identity_variance',
+            # decoder_distribution='laplace_identity_variance',
             # decoder_distribution='huber_identity_variance',
         ),
         decoder_activation=identity,
@@ -159,9 +62,9 @@ def main(args):
             # loss_type='consistency_loss_w_cycle',
             # loss_type='consistency_loss_rm_dec_path',
 
-            # distance=mse_loss,
+            distance=mse_loss,
             # distance=l1_loss,
-            distance=huber_loss,
+            # distance=huber_loss,
 
             alpha1=1.0,
             alpha2=0.0,
@@ -171,12 +74,24 @@ def main(args):
         init_tgt_by_src=True,
 
         vae_da_scheduler=vae_da_loss_schedule_v1,
-        vae_da_scheduler_step=1000,
+        vae_da_scheduler_step=500,
 
-        n_epochs=3000,
+        n_epochs=1000,
         step1=10000,  # Step to decay learning rate
         batch_size=50,
         lr=1e-3,
+
+        # TUNG: REGION FOR TESTING
+        test_opt=dict(
+            test_enable=True,
+            period=50,
+            env_name='SawyerPushNIPSCustomEasy-v0',
+            imsize=48,
+            init_camera=sawyer_init_camera_zoomed_in_aim_v1,
+            n_test=3,
+            H=50,
+            hide=True
+        )
     )
     if args.seed is None:
         variant['seed'] = random.randint(0, 100000)
@@ -192,10 +107,8 @@ def main(args):
                                variant['rand_src_dir'], variant['rand_tgt_dir'],
                                variant['pair_src_dir'], variant['pair_tgt_dir'],
                                test_ratio=variant['test_ratio'])
-    print('No. of random train data: Sim={}, Real={}'.format(len(rand_src_train),
-                                                             len(rand_tgt_train)))
-    print('No. of pair train data: Sim={}, Real={}'.format(len(pair_src_train),
-                                                           len(pair_tgt_train)))
+    print('Rand train data: Sim={}, Real={}'.format(len(rand_src_train), len(rand_tgt_train)))
+    print('Pair train data: Sim={}, Real={}'.format(len(pair_src_train), len(pair_tgt_train)))
 
     ##########################
     #       Load models      #
@@ -203,6 +116,7 @@ def main(args):
     print('[INFO] Loading checkpoint...')
     data = torch.load(open(args.file, "rb"))
     env = data['evaluation/env']
+    policy = data['evaluation/policy']
     src_vae = env.vae
 
     tgt_vae = create_target_encoder(variant['vae_kwargs'],
@@ -213,6 +127,12 @@ def main(args):
 
     if variant['init_tgt_by_src']:
         tgt_vae.load_state_dict(src_vae.state_dict())
+
+    # Setup for testing
+    test_env = create_vae_wrapped_env(env_name=variant['test_opt']['env_name'],
+                                      vae=tgt_vae,
+                                      imsize=variant['test_opt']['imsize'],
+                                      init_camera=variant['test_opt']['init_camera'])
 
     # Setup criterion and optimizer
     params = tgt_vae.parameters()
@@ -270,7 +190,8 @@ def main(args):
                   pair_data_real_eval=pair_tgt_eval, pair_data_sim_eval=pair_src_eval,
                   statistics=eval_statistics, tb=tensor_board,
                   variant=variant, save_path=ckpt_path, epoch=epoch,
-                  losses=losses, log_probs=log_probs, kles=kles, pair_losses=pair_losses)
+                  losses=losses, log_probs=log_probs, kles=kles, pair_losses=pair_losses,
+                  test_env=test_env, policy=policy)
 
 
 parser = argparse.ArgumentParser()

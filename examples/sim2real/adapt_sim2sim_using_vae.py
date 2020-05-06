@@ -19,122 +19,6 @@ from rlkit.sim2real.goal_test import set_of_goals
 from rlkit.samplers.rollout_functions import multitask_rollout_sim2real
 
 
-def start_epoch(n_train_data, learning_rate_scheduler=None):
-    losses, log_probs, kles, pair_losses = [], [], [], []
-    idxes = np.random.permutation(n_train_data)
-    if learning_rate_scheduler is not None:
-        learning_rate_scheduler.step()
-    return (losses, log_probs, kles, pair_losses), idxes
-
-
-def end_epoch(tgt_net, src_net,
-              rand_data_real_eval, rand_data_sim_eval, pair_data_real_eval, pair_data_sim_eval,
-              statistics, tb, variant, save_path, epoch,
-              losses, log_probs, kles, pair_losses, test_env, policy):
-    # ============== Test for debugging VAE ==============
-    tgt_net.eval()
-    debug_batch_size = 32
-    idx = np.random.randint(0, len(rand_data_real_eval), variant['batch_size'])
-    images = ptu.from_numpy(rand_data_real_eval[idx])
-    reconstructions, _, _ = tgt_net(images)
-    img = images[0]
-
-    recon_mse = ((reconstructions[0] - img) ** 2).mean().view(-1)
-    img_repeated = img.expand((debug_batch_size, img.shape[0]))
-
-    samples = ptu.randn(debug_batch_size, variant['representation_size'])
-    random_imgs, _ = tgt_net.decode(samples)
-    random_mses = (random_imgs - img_repeated) ** 2
-    mse_improvement = ptu.get_numpy(random_mses.mean(dim=1) - recon_mse)
-    # ============== Test for debugging VAE ==============
-
-    # ========= Test for debugging pairwise data =========
-    eval_batch_size = 100
-    idxes = np.arange(len(pair_data_real_eval))
-    latent_pair_loss = []
-    for b in range(len(pair_data_real_eval) // eval_batch_size):
-        eval_sim = get_batch(pair_data_sim_eval, b, idxes, eval_batch_size)
-        eval_real = get_batch(pair_data_real_eval, b, idxes, eval_batch_size)
-        latent_sim, _ = src_net.encode(eval_sim)
-        latent_real, _ = tgt_net.encode(eval_real)
-        eval_loss = F.mse_loss(latent_real, latent_sim)
-        latent_pair_loss.append(eval_loss.item())
-    # ========= Test for debugging pairwise data =========
-
-    # ========= Test adapted VAE in target domain env =========
-    if variant['test_opt']['test_enable'] and \
-            (epoch % variant['test_opt']['period'] == 0 or epoch == variant['n_epochs'] - 1):
-        ob_dist_mean, ob_dist_std, ee_dist_mean, ee_dist_std = \
-            rollout_pusher(variant, policy, test_env)
-
-    stats = create_stats_ordered_dict('debug/MSE improvement over random', mse_improvement)
-    stats.update(create_stats_ordered_dict('debug/MSE of random decoding',
-                                           ptu.get_numpy(random_mses)))
-    stats['debug/MSE of reconstruction'] = ptu.get_numpy(recon_mse)[0]
-    save_dict = {
-        'epoch': epoch,
-        'model': tgt_net.state_dict()
-    }
-    torch.save(save_dict, os.path.join(save_path, 'vae_ckpt.pth'))
-
-    statistics['train/Log Prob'] = np.mean(log_probs)
-    statistics['train/KL'] = np.mean(kles)
-    statistics['train/loss'] = np.mean(losses)
-    statistics['train/pair_loss'] = np.mean(pair_losses)
-    statistics['eval/pair_loss'] = np.mean(latent_pair_loss)
-    for key, value in stats.items():
-        statistics[key] = value
-    for k, v in statistics.items():
-        logger.record_tabular(k, v)
-    logger.dump_tabular()
-
-    tb.add_scalar('train/log_prob', np.mean(log_probs), epoch)
-    tb.add_scalar('train/KL', np.mean(kles), epoch)
-    tb.add_scalar('train/loss', np.mean(losses), epoch)
-    tb.add_scalar('train/pair_loss', np.mean(pair_losses), epoch)
-    tb.add_scalar('eval/pair_loss', np.mean(latent_pair_loss), epoch)
-    if variant['test_opt']['test_enable'] and \
-            (epoch % variant['test_opt']['period'] == 0 or epoch == variant['n_epochs'] - 1):
-        tb.add_scalar('eval/puck_distance (mean)', ob_dist_mean, epoch)
-        tb.add_scalar('eval/puck_distance (std)', ob_dist_mean, epoch)
-        tb.add_scalar('eval/hand_distance (mean)', ee_dist_mean, epoch)
-        tb.add_scalar('eval/hand_distance (std)', ee_dist_std, epoch)
-
-    for key, value in stats.items():
-        tb.add_scalar(key, value, epoch)
-
-
-def rollout_pusher(variant, policy, env):
-    n_goals = len(set_of_goals)
-    final_puck_distance = np.zeros((n_goals, variant['test_opt']['n_test']))
-    final_hand_distance = np.zeros_like(final_puck_distance)
-    print('[INFO] Starting test in set of goals...')
-    for goal_id in tqdm(range(n_goals)):
-        # Assign goal from set of goals
-        env.wrapped_env.wrapped_env.fixed_hand_goal = set_of_goals[goal_id][0]
-        env.wrapped_env.wrapped_env.fixed_puck_goal = set_of_goals[goal_id][1]
-
-        # Number of test per each goal
-        paths_per_goal = []
-        for i in range(variant['test_opt']['n_test']):
-            paths_per_goal.append(multitask_rollout_sim2real(
-                env,
-                policy,
-                max_path_length=variant['test_opt']['H'],
-                render=not variant['test_opt']['hide'],
-                observation_key='observation',
-                desired_goal_key='desired_goal',
-            ))
-            final_puck_distance[goal_id, i] = paths_per_goal[i]['env_infos'][-1]['puck_distance']
-            final_hand_distance[goal_id, i] = paths_per_goal[i]['env_infos'][-1]['hand_distance']
-
-    ob_dist_mean = final_puck_distance.mean()
-    ob_dist_std = final_puck_distance.mean(axis=0).std()
-    ee_dist_mean = final_hand_distance.mean()
-    ee_dist_std = final_hand_distance.mean(axis=0).std()
-    return ob_dist_mean, ob_dist_std, ee_dist_mean, ee_dist_std
-
-
 def main(args):
     # Config for running-time
     if args.gpu:
@@ -153,8 +37,10 @@ def main(args):
         # pair_tgt_dir='randlarger_pair_sim_tgt.1000',
         # pair_src_dir='randlarger_pair_sim_src.2000',
         # pair_tgt_dir='randlarger_pair_sim_tgt.2000',
-        pair_src_dir='randlarger_pair_sim_src.3000',
-        pair_tgt_dir='randlarger_pair_sim_tgt.3000',
+        # pair_src_dir='randlarger_pair_sim_src.3000',
+        # pair_tgt_dir='randlarger_pair_sim_tgt.3000',
+        pair_src_dir='rand_pair_sim_src.5000',
+        pair_tgt_dir='rand_pair_sim_tgt.5000',
         test_ratio=0.1,
         vae_kwargs=dict(
             input_channels=3,
@@ -167,7 +53,8 @@ def main(args):
         representation_size=4,
         # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_1000pair/',
         # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_2000pair/',
-        default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_3000pair/',
+        # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_3000pair/',
+        default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_5000pair_old/',
         beta=20,
 
         # TUNG: REGION FOR TRAINING
