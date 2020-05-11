@@ -283,6 +283,17 @@ def pairwise_loss_schedule(value, epoch):
         return value
 
 
+def vae_da_loss_schedule_v0(epoch, step, vae_loss_opt, da_loss_opt):
+    """
+    Used for VAE & consistency loss
+    """
+    _vae_loss_opt = vae_loss_opt.copy()
+    _da_loss_opt = da_loss_opt.copy()
+    _vae_loss_opt['alpha0'] = 1.0 * vae_loss_opt['alpha0']
+    _da_loss_opt['alpha1'] = 1.0 * da_loss_opt['alpha1']
+    return _vae_loss_opt, _da_loss_opt
+
+
 def vae_da_loss_schedule_v1(epoch, step, vae_loss_opt, da_loss_opt):
     """
     Used for VAE & consistency loss
