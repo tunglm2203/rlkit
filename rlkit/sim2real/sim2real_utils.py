@@ -464,7 +464,8 @@ def start_epoch(n_train_data, learning_rate_scheduler=None):
 def end_epoch(tgt_net, src_net,
               rand_data_real_eval, rand_data_sim_eval, pair_data_real_eval, pair_data_sim_eval,
               statistics, tb, variant, save_path, epoch,
-              losses, log_probs, kles, pair_losses, test_env, policy):
+              losses, log_probs, kles, pair_losses,
+              test_env=None, policy=None):
     # ============== Test for debugging VAE ==============
     tgt_net.eval()
     debug_batch_size = 32
