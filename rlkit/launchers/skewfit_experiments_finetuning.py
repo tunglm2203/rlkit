@@ -532,20 +532,36 @@ def skewfit_experiment(variant):
         **variant['twin_sac_trainer_kwargs']
     )
 
-    # TUNG: Check this experiment is finetuning or not
+    # TUNG: ========= Check this experiment is fine-tuning =========
     if variant['finetune']:
         print('[INFO] Loading pretrain model...')
-        policy_path = variant.get('pretrain_policy_path', None)
+        policy_path = variant['finetune_kwargs'].get('pretrain_policy_path', None)
         assert policy is not None, '[ERROR] Cannot find the pretrained model.'
+
         data = torch.load(open(policy_path, "rb"))
         pretrained_policy = data['trainer/policy']
-        pretrained_vae = data['vae']
+        pretrained_vae = variant['finetune_kwargs'].get('pretrain_vae', None)
+
+        if pretrained_vae is None:
+            print('[INFO] Loading pretrain VAE from source domain...')
+            pretrained_vae = data['vae']
+            vae.load_state_dict(pretrained_vae.state_dict())
+        else:
+            print('[INFO] Loading adapted VAE...')
+            adapted_vae = torch.load(open(pretrained_vae, "rb"))
+            vae.load_state_dict(adapted_vae['model'])
+
         policy.load_state_dict(pretrained_policy.state_dict())
-        vae.load_state_dict(pretrained_vae.state_dict())
-        start_epoch_from = variant.get('start_epoch_from', 0)
+        start_epoch_from = variant['finetune_kwargs'].get('start_epoch_from', 0)
+
+        # Override value for fine-tuning
+        variant['algo_kwargs']['num_epochs'] = variant['finetune_kwargs']['num_epochs']
+        variant['algo_kwargs']['vae_training_schedule'] = \
+            variant['finetune_kwargs']['vae_training_schedule']
         print('[INFO] Load pretrain model completely.')
     else:
         start_epoch_from = 0
+    # =========> Finish check fine-tuning <=========
 
     trainer = HERTrainer(trainer)
     eval_path_collector = VAEWrappedEnvPathCollector(

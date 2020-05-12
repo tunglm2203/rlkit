@@ -14,14 +14,17 @@ if __name__ == "__main__":
         double_algo=False,
         online_vae_exploration=False,
         imsize=48,
-        # init_camera=sawyer_init_camera_zoomed_in_aim_v1,
-        # env_id='SawyerPushNIPSCustomEasy-v0',
-        init_camera=sawyer_init_camera_zoomed_in_aim_v0,
-        env_id='SawyerPushNIPSEasy-v0',
+        init_camera=sawyer_init_camera_zoomed_in_aim_v1,
+        env_id='SawyerPushNIPSCustomEasy-v0',
         skewfit_variant=dict(
-            pretrain_policy_path='/mnt/hdd/tung/workspace/rlkit/data/04-14-dev-new-env-examples-skewfit-sawyer-push-SawyerPushNIPSEasy-v0/04-14-dev-new-env-examples-skewfit-sawyer-push-SawyerPushNIPSEasy-v0_2020_04_14_11_27_22_0000--s-10707/params.pkl',
             finetune=True,
-            start_epoch_from=1000,
+            finetune_kwargs=dict(
+                pretrain_policy_path='/mnt/hdd/tung/workspace/rlkit/data/04-14-dev-new-env-examples-skewfit-sawyer-push-SawyerPushNIPSEasy-v0/04-14-dev-new-env-examples-skewfit-sawyer-push-SawyerPushNIPSEasy-v0_2020_04_14_11_27_22_0000--s-10707/params.pkl',
+                pretrain_vae='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_1000pair/vae-exp-date-2020-05-08/1000pair_ctc_1200ep_alpha1_notusemu_inittgtbysrc_mse_sche_v1_step500_merge-vae-exp-time-12-40-01-s97837/vae_ckpt.pth',
+                start_epoch_from=1000,
+                num_epochs=1700,
+                vae_training_schedule=vae_schedules.never_train
+            ),
 
             save_video=True,
             custom_goal_sampler='replay_buffer',
@@ -42,7 +45,7 @@ if __name__ == "__main__":
             max_path_length=50,
             algo_kwargs=dict(
                 batch_size=1024,
-                num_epochs=1300,
+                num_epochs=1000,                    # TUNG: Need to change here for fine-tuning
                 num_eval_steps_per_epoch=500,
                 num_expl_steps_per_train_loop=500,
                 num_trains_per_train_loop=1000,
