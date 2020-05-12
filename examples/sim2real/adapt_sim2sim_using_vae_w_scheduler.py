@@ -47,7 +47,7 @@ def main(args):
         # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_new_data',
         # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_new_data_5000',
         default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_1000pair/',
-        beta=20,
+        # default_path='/mnt/hdd/tung/workspace/rlkit/data/vae_adapt_10000rand_2000pair/',
 
         # TUNG: Change below
         vae_loss_opt=dict(
@@ -69,14 +69,15 @@ def main(args):
             alpha1=1.0,
             alpha2=0.0,
             alpha3=0.0,
-            use_mu=False
+            use_mu=False                            # TUNG: Best: False, in case schedule
         ),
         init_tgt_by_src=True,
+        merge_rand_pair_tgt=True,
 
-        vae_da_scheduler=vae_da_loss_schedule_v1,
+        vae_da_scheduler=vae_da_loss_schedule_v1,   # TUNG: Best: v1, in case schedule
         vae_da_scheduler_step=500,
 
-        n_epochs=1000,
+        n_epochs=1200,                              # TUNG: Best: 1000, 1200, in case schedule
         step1=10000,  # Step to decay learning rate
         batch_size=50,
         lr=1e-3,
@@ -106,7 +107,8 @@ def main(args):
         load_all_required_data(variant['path_to_data'],
                                variant['rand_src_dir'], variant['rand_tgt_dir'],
                                variant['pair_src_dir'], variant['pair_tgt_dir'],
-                               test_ratio=variant['test_ratio'])
+                               test_ratio=variant['test_ratio'],
+                               merge_rand_pair_tgt=variant['merge_rand_pair_tgt'])
     print('Rand train data: Sim={}, Real={}'.format(len(rand_src_train), len(rand_tgt_train)))
     print('Pair train data: Sim={}, Real={}'.format(len(pair_src_train), len(pair_tgt_train)))
 
