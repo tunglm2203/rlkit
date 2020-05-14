@@ -82,6 +82,8 @@ def main(args):
         batch_size=50,
         lr=1e-3,
 
+        period_log=5,
+
         # TUNG: REGION FOR TESTING
         test_opt=dict(
             test_enable=True,
