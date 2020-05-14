@@ -466,6 +466,9 @@ def end_epoch(tgt_net, src_net,
               statistics, tb, variant, save_path, epoch,
               losses, log_probs, kles, pair_losses,
               test_env=None, policy=None):
+    period_log = variant.get('period_log', 1)
+    print("\n[INFO] Experiment: ", save_path)
+    n_im_dis = 8
     # ============== Test for debugging VAE ==============
     tgt_net.eval()
     debug_batch_size = 32
@@ -481,7 +484,6 @@ def end_epoch(tgt_net, src_net,
     random_imgs, _ = tgt_net.decode(samples)
     random_mses = (random_imgs - img_repeated) ** 2
     mse_improvement = ptu.get_numpy(random_mses.mean(dim=1) - recon_mse)
-    # ============== Test for debugging VAE ==============
 
     # ========= Test for debugging pairwise data =========
     eval_batch_size = 100
@@ -494,7 +496,20 @@ def end_epoch(tgt_net, src_net,
         latent_real, _ = tgt_net.encode(eval_real)
         eval_loss = F.mse_loss(latent_real, latent_sim)
         latent_pair_loss.append(eval_loss.item())
-    # ========= Test for debugging pairwise data =========
+        if b == len(pair_data_real_eval) // eval_batch_size - 1:
+            rec_pair_real, _ = tgt_net.decode(latent_real)
+            rec_pair_r2s, _ = src_net.decode(latent_real)
+            rec_pair_sim, _ = src_net.decode(latent_sim)
+            rec_pair_s2r, _ = tgt_net.decode(latent_sim)
+    if epoch % period_log == 0 or epoch == variant['n_epochs'] - 1:
+        tb.add_images('rand_image', images[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
+        tb.add_images('rand_image_rec', reconstructions[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
+        tb.add_images('pair_image_real', eval_real[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
+        tb.add_images('pair_image_real_rec', rec_pair_real[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
+        tb.add_images('pair_image_real2sim_rec', rec_pair_r2s[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
+        tb.add_images('pair_image_sim', eval_sim[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
+        tb.add_images('pair_image_sim_rec', rec_pair_sim[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
+        tb.add_images('pair_image_sim2real_rec', rec_pair_s2r[:n_im_dis].reshape(-1, 3, 48, 48), epoch)
 
     # ========= Test adapted VAE in target domain env =========
     if variant['test_opt']['test_enable'] and \
@@ -502,9 +517,11 @@ def end_epoch(tgt_net, src_net,
         ob_dist_mean, ob_dist_std, ee_dist_mean, ee_dist_std = \
             rollout_pusher(variant, policy, test_env)
 
-    stats = create_stats_ordered_dict('debug/MSE improvement over random', mse_improvement)
+    # ========= Creating checkpoint to store =========
+    stats = create_stats_ordered_dict('debug/MSE improvement over random', mse_improvement,
+                                      exclude_max_min=True)
     stats.update(create_stats_ordered_dict('debug/MSE of random decoding',
-                                           ptu.get_numpy(random_mses)))
+                                           ptu.get_numpy(random_mses), exclude_max_min=True))
     stats['debug/MSE of reconstruction'] = ptu.get_numpy(recon_mse)[0]
     save_dict = {
         'epoch': epoch,
@@ -523,11 +540,13 @@ def end_epoch(tgt_net, src_net,
         logger.record_tabular(k, v)
     logger.dump_tabular()
 
-    tb.add_scalar('train/log_prob', np.mean(log_probs), epoch)
-    tb.add_scalar('train/KL', np.mean(kles), epoch)
-    tb.add_scalar('train/loss', np.mean(losses), epoch)
-    tb.add_scalar('train/pair_loss', np.mean(pair_losses), epoch)
-    tb.add_scalar('eval/pair_loss', np.mean(latent_pair_loss), epoch)
+    if epoch % period_log == 0 or epoch == variant['n_epochs'] - 1:
+        tb.add_scalar('train/log_prob', np.mean(log_probs), epoch)
+        tb.add_scalar('train/KL', np.mean(kles), epoch)
+        tb.add_scalar('train/loss', np.mean(losses), epoch)
+        tb.add_scalar('train/pair_loss', np.mean(pair_losses), epoch)
+        tb.add_scalar('eval/pair_loss', np.mean(latent_pair_loss), epoch)
+
     if variant['test_opt']['test_enable'] and \
             (epoch % variant['test_opt']['period'] == 0 or epoch == variant['n_epochs'] - 1):
         tb.add_scalar('eval/puck_distance (mean)', ob_dist_mean, epoch)
@@ -535,5 +554,6 @@ def end_epoch(tgt_net, src_net,
         tb.add_scalar('eval/hand_distance (mean)', ee_dist_mean, epoch)
         tb.add_scalar('eval/hand_distance (std)', ee_dist_std, epoch)
 
-    for key, value in stats.items():
-        tb.add_scalar(key, value, epoch)
+    if epoch % period_log == 0 or epoch == variant['n_epochs'] - 1:
+        for key, value in stats.items():
+            tb.add_scalar(key, value, epoch)
