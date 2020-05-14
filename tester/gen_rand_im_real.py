@@ -16,10 +16,10 @@ def main():
     # ======================== USER SCOPE  ========================
     env_id = 'SawyerPushXYReal-v0'
     # env_id = 'SawyerPushXYRealMedium-v0'
-    n_samples = 10
+    n_samples = 10000
     imsize = 48
     n_samples_to_reset = 1
-    data_folder = 'rand_img_real.{}'.format(n_samples)
+    data_folder = 'randlarger_img_real.{}'.format(n_samples)
     key_img = 'image_desired_goal'
     # key_img = 'image_observation'
 
@@ -30,7 +30,12 @@ def main():
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     # Create environment
-    env_real = gym.make(env_id, use_gazebo_auto=True)
+    env_real = gym.make(env_id,
+                        hand_goal_low=(0.5, -0.2),
+                        hand_goal_high=(0.7, 0.2),
+                        puck_goal_low=(0.5, -0.2),
+                        puck_goal_high=(0.7, 0.2),
+                        use_gazebo_auto=True)
     env_real = ImageEnv(env_real,
                         imsize=imsize,
                         normalize=True,
