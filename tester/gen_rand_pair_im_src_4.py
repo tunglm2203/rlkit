@@ -67,9 +67,10 @@ def main():
                        normalize=True,
                        transpose=True,
                        init_camera=sawyer_init_camera_zoomed_in_aim_v0)
-
-    for i in tqdm(range(n_trajectories)):
+    start_trajectory = 0
+    for i in tqdm(range(start_trajectory, n_trajectories)):
         for t in range(horizon + 1):
+            env_sim.reset()
             # Roll-out into environment
             env_sim._goal_xyxy = np.zeros(4)
             env_sim._goal_xyxy[:2] = np.array(episodes[i][t]['obj_pos'][:2])  # OBJ
@@ -96,6 +97,7 @@ def main():
             filename = os.path.join(save_path, 'ep_{}_s_{}'.format(i, t))
             cv2.imwrite(filename + '.png', unormalize_image(im_show))
             np.savez_compressed(filename, im=img)
+
 
 
 if __name__ == '__main__':
