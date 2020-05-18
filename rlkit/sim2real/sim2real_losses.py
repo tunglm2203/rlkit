@@ -56,8 +56,8 @@ def consistency_loss(pair_sim, pair_real, sim_vae, real_vae, opt):
         latents_real = real_vae.reparameterize(latent_distribution_params_real)
         _, obs_distribution_params_sim = sim_vae.decode(latents_real)
 
-    ctc_sim2real = f_distance(pair_real, obs_distribution_params_real[0])
-    ctc_real2sim = f_distance(pair_sim, obs_distribution_params_sim[0])
+    ctc_sim2real = f_distance(pair_real, obs_distribution_params_real[0], imlength=real_vae.imlength)
+    ctc_real2sim = f_distance(pair_sim, obs_distribution_params_sim[0], imlength=real_vae.imlength)
     return alpha1 * (ctc_sim2real + ctc_real2sim)
 
 
@@ -95,24 +95,28 @@ def consistency_loss_w_cycle(pair_sim, pair_real, sim_vae, real_vae, opt):
     rec_latent_params_sim = sim_vae.encode(rec_params_sim[0].detach())
     _, rec_params_real_2 = real_vae.decode(rec_latent_params_sim[0])
 
-    cycle_sim2sim = f_distance(pair_sim, rec_params_sim_2[0])
-    cycle_real2real = f_distance(pair_real, rec_params_real_2[0])
+    cycle_sim2sim = f_distance(pair_sim, rec_params_sim_2[0], imlength=real_vae.imlength)
+    cycle_real2real = f_distance(pair_real, rec_params_real_2[0], imlength=real_vae.imlength)
     cycle_total = cycle_sim2sim + cycle_real2real
 
     # ============== Consitency loss of latent ==============
     _, rec_params_real_hat = real_vae.decode(latent_params_sim[0].detach())
     latent_params_real_hat = real_vae.encode(rec_params_real_hat[0])
     if ctc_latent_cross:
-        ctc_latent_sim2real = f_distance(latent_params_real[0].detach(), latent_params_real_hat[0])
+        ctc_latent_sim2real = f_distance(latent_params_real[0].detach(), latent_params_real_hat[0],
+                                         imlength=real_vae.imlength)
     else:
-        ctc_latent_sim2sim = f_distance(latent_params_sim[0].detach(), latent_params_real_hat[0])
+        ctc_latent_sim2sim = f_distance(latent_params_sim[0].detach(), latent_params_real_hat[0],
+                                        imlength=real_vae.imlength)
 
     _, obs_params_sim_hat = sim_vae.decode(latent_params_real[0].detach())
     latent_params_sim_hat = sim_vae.encode(obs_params_sim_hat[0])
     if ctc_latent_cross:
-        ctc_latent_real2sim = f_distance(latent_params_sim[0].detach(), latent_params_sim_hat[0])
+        ctc_latent_real2sim = f_distance(latent_params_sim[0].detach(), latent_params_sim_hat[0],
+                                         imlength=real_vae.imlength)
     else:
-        ctc_latent_real2real = f_distance(latent_params_real[0].detach(), latent_params_sim_hat[0])
+        ctc_latent_real2real = f_distance(latent_params_real[0].detach(), latent_params_sim_hat[0],
+                                          imlength=real_vae.imlength)
 
     if ctc_latent_cross:
         ctc_latent_total = ctc_latent_sim2real + ctc_latent_real2sim
