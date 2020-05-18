@@ -172,6 +172,10 @@ def simulate_policy_on_real(args):
                 goals.append(dict(ee=set_of_goals[goal_id][0], obj=set_of_goals[goal_id][1]))
                 final_puck_distance[goal_id, n_test - 1] = path['env_infos'][-1]['puck_distance']
                 final_hand_distance[goal_id, n_test - 1] = path['env_infos'][-1]['hand_distance']
+        print("Puck distance: mean=%.4f, std=%.4f" % (final_puck_distance.mean(),
+                                                      final_puck_distance.mean(axis=0).std()))
+        print("Hand distance: mean=%.4f, std=%.4f" % (final_hand_distance.mean(),
+                                                      final_hand_distance.mean(axis=0).std()))
         paths.append(paths_per_goal)
 
     # ===================== POST-PROCESSING SCOPE =====================
