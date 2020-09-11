@@ -11,6 +11,7 @@ import rlkit.torch.pytorch_util as ptu
 from multiworld.core.multitask_env import MultitaskEnv
 from multiworld.envs.env_util import get_stat_in_paths, create_stats_ordered_dict
 from rlkit.envs.wrappers import ProxyEnv
+from rlkit.sim2real.sim2real_utils import *
 
 
 class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
@@ -111,18 +112,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
 
     def _update_obs(self, obs):
         # TUNG: Hack this to use mujoco image
-        # Get coordinate real
-        ee_pos = self.wrapped_env._get_endeffector_pose()
-        obj_pos = self.wrapped_env.get_obj_pos_in_gazebo('cylinder')
-        # Make the coordinate of Mujoco
-        self.image_env_sim._goal_xyxy = np.zeros(4)
-        self.image_env_sim._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
-        self.image_env_sim._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
-        self.image_env_sim.set_goal_xyxy(self.image_env_sim._goal_xyxy)
-        self.image_env_sim.reset_mocap_welds()
-        self.image_env_sim._get_obs()
-        # Get image on Mujoco
-        self.image_env_sim.wrapped_env.set_to_goal(self.image_env_sim.wrapped_env.get_goal())
+        set_env_state_real2sim(src=self.wrapped_env, target=self.image_env_sim)
         img = self.image_env_sim._get_flat_img()
         # Encode image
         obs['image_observation_mujoco'] = img
@@ -183,18 +173,7 @@ class VAEWrappedEnv(ProxyEnv, MultitaskEnv):
             goals = {k: v[None] for k, v in goal.items()}
 
             # TUNG: Hack this to use mujoco image
-            # Get coordinate real
-            obj_pos = goals['state_desired_goal'][0][:2]
-            ee_pos = goals['state_desired_goal'][0][2:]
-            # Make the coordinate of Mujoco
-            self.image_env_sim._goal_xyxy = np.zeros(4)
-            self.image_env_sim._goal_xyxy[:2] = np.array(ee_pos[:2])  # EE
-            self.image_env_sim._goal_xyxy[2:] = np.array(obj_pos[:2])  # OBJ
-            self.image_env_sim.set_goal_xyxy(self.image_env_sim._goal_xyxy)
-            self.image_env_sim.reset_mocap_welds()
-            self.image_env_sim._get_obs()
-            # Get image on Mujoco
-            self.image_env_sim.wrapped_env.set_to_goal(self.image_env_sim.wrapped_env.get_goal())
+            set_env_state_real2sim(src=self.wrapped_env, target=self.image_env_sim, set_goal=True)
             img = self.image_env_sim._get_flat_img()
             # Encode image
             goals['image_desired_goal_mujoco'] = img[None]
