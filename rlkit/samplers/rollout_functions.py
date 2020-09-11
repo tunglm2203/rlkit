@@ -92,6 +92,82 @@ def multitask_rollout_sim2real(
     )
 
 
+def multitask_rollout_real(
+        env,
+        agent,
+        max_path_length=np.inf,
+        render=False,
+        render_kwargs=None,
+        observation_key=None,
+        desired_goal_key=None,
+        get_action_kwargs=None,
+        return_dict_obs=False,
+):
+    if render_kwargs is None:
+        render_kwargs = {}
+    if get_action_kwargs is None:
+        get_action_kwargs = {}
+    dict_obs = []
+    dict_next_obs = []
+    observations = []
+    actions = []
+    rewards = []
+    terminals = []
+    agent_infos = []
+    env_infos = []
+    next_observations = []
+    path_length = 0
+    agent.reset()
+    o = env.reset()
+    if render:
+        env.render(**render_kwargs)
+    goal = o[desired_goal_key]
+    print('[INFO] Desired goal: ', goal)
+    while path_length < max_path_length:
+        dict_obs.append(o)
+        if observation_key:
+            o = o[observation_key]
+        new_obs = np.hstack((o, goal))
+        a, agent_info = agent.get_action(new_obs, **get_action_kwargs)
+        print('[INFO] Action: ', a)
+        import pdb; pdb.set_trace()
+        next_o, r, d, env_info = env.step(a)
+        print('[INFO] Is successful: ', env_info['hand_success'])
+        if render:
+            env.render(**render_kwargs)
+        observations.append(o)
+        rewards.append(r)
+        terminals.append(d)
+        actions.append(a)
+        next_observations.append(next_o)
+        dict_next_obs.append(next_o)
+        agent_infos.append(agent_info)
+        env_infos.append(env_info)
+        path_length += 1
+        if d:
+            break
+        o = next_o
+    actions = np.array(actions)
+    if len(actions.shape) == 1:
+        actions = np.expand_dims(actions, 1)
+    observations = np.array(observations)
+    next_observations = np.array(next_observations)
+    if return_dict_obs:
+        observations = dict_obs
+        next_observations = dict_next_obs
+    return dict(
+        observations=observations,
+        actions=actions,
+        rewards=np.array(rewards).reshape(-1, 1),
+        next_observations=next_observations,
+        terminals=np.array(terminals).reshape(-1, 1),
+        agent_infos=agent_infos,
+        env_infos=env_infos,
+        goals=np.repeat(goal[None], path_length, 0),
+        full_observations=dict_obs,
+    )
+
+
 def multitask_rollout(
         env,
         agent,
