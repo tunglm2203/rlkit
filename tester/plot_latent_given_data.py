@@ -20,6 +20,7 @@ from rlkit.torch import pytorch_util as ptu
 from rlkit.envs.vae_wrapper import VAEWrappedEnv
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.sim2real.generator import *
+from rlkit.sim2real.sim2real_utils import *
 
 
 def load_data(path=''):
@@ -116,22 +117,32 @@ def debug_learning_curve_learned_vae(args,
 
 
 def main(args):
-    # Load images
+    # ===================== USER SCOPE =====================
     print('Loading images...')
-    path_to_images_r = '/mnt/hdd/tung/workspace/rlkit/tester/images_real'
-    path_to_images_s = '/mnt/hdd/tung/workspace/rlkit/tester/images_sim'
-    # path_to_images_r = '/mnt/hdd/tung/workspace/rlkit/tester/random_images_real'
-    # path_to_images_s = '/mnt/hdd/tung/workspace/rlkit/tester/random_images_sim'
-    # path_to_images_r = '/mnt/hdd/tung/workspace/rlkit/tester/random_images_real.new'
-    # path_to_images_s = '/mnt/hdd/tung/workspace/rlkit/tester/random_images_sim.new'
-    # path_to_images_r = '/mnt/hdd/tung/workspace/rlkit/tester/random_pair_real'
-    # path_to_images_s = '/mnt/hdd/tung/workspace/rlkit/tester/random_pair_sim'
-    images_r = load_data(path=path_to_images_r)
-    images_s = load_data(path=path_to_images_s)
-    print('Number of real images: ', len(images_r))
-    print('Number of sim images: ', len(images_s))
+    root_path = '/mnt/hdd/tung/workspace/rlkit/tester/'
+
+    rand_src_dir = None
+    rand_tgt_dir = None
+    # pair_src_dir = 'images_sim'
+    # pair_tgt_dir = 'images_real'
+    # pair_src_dir = 'random_pair_sim'
+    # pair_tgt_dir = 'random_pair_real'
+    # pair_src_dir = 'rand_pair_sim_src.500'
+    # pair_tgt_dir = 'rand_pair_sim_tgt.500'
+    pair_src_dir = 'rand_pair_sim_src.1000'
+    pair_tgt_dir = 'rand_pair_sim_tgt.1000'
+
+    # ===================== LOAD & CREATE MODEL SCOPE =====================
+    _, _, _, _, pair_src_train, pair_src_eval, pair_tgt_train, pair_tgt_eval = \
+        load_all_required_data(root_path, rand_src_dir, rand_tgt_dir, pair_src_dir, pair_tgt_dir)
+    pair_im_src = np.concatenate((pair_src_train, pair_src_eval))
+    pair_im_tgt = np.concatenate((pair_tgt_train, pair_tgt_eval))
+
+    print('[INFO] Number of real images: ', len(pair_im_tgt))
+    print('[INFO] Number of sim images: ', len(pair_im_src))
+
     # Load pre-trained policy
-    print("Loading policy and environment...")
+    print("[INFO] Loading policy, environment, VAE ...")
     sim_data = torch.load(open(args.file, "rb"))
     env = sim_data['evaluation/env']
 
@@ -153,25 +164,27 @@ def main(args):
         tgt_vae.to(ptu.device)
         tgt_vae.load_state_dict(adapted_gan['model'])
 
-    assert images_r.dtype == np.float64
-    assert images_s.dtype == np.float64
-    imgs_r = ptu.from_numpy(images_r)
-    imgs_s = ptu.from_numpy(images_s)
-    latents = None
-    if len(images_r) > 0:
-        if args.vae is not None:
-            latent_distribution_params_r, _ = tgt_vae.encode(imgs_r)
-        elif args.gan is not None:
-            latent_distribution_params_r = tgt_vae(imgs_r)
-        else:
-            latent_distribution_params_r, _ = src_vae.encode(imgs_r)
+    print("[INFO] Load successfully.")
 
-        latent_distribution_params_s = src_vae.encode(imgs_s)
-        latents_r = ptu.get_numpy(latent_distribution_params_r)
-        latents_s = ptu.get_numpy(latent_distribution_params_s[0])
-        # Merge sim & real data together to make same relative coordinate
-        latents = np.concatenate((latents_s, latents_r), axis=0)
+    assert pair_im_tgt.dtype == np.float64 and pair_im_src.dtype == np.float64, "Image wrong format"
+    pair_im_tgt_tensor = ptu.from_numpy(pair_im_tgt)
+    pair_im_src_tensor = ptu.from_numpy(pair_im_src)
 
+    # ===================== PROCESS DATA TO LATENT SPACE =====================
+    if args.vae is not None:
+        latent_distribution_params_r, _ = tgt_vae.encode(pair_im_tgt_tensor)
+    elif args.gan is not None:
+        latent_distribution_params_r = tgt_vae(pair_im_tgt_tensor)
+    else:
+        latent_distribution_params_r, _ = src_vae.encode(pair_im_tgt_tensor)
+    latent_distribution_params_s, _ = src_vae.encode(pair_im_src_tensor)
+
+    latents_r = ptu.get_numpy(latent_distribution_params_r)
+    latents_s = ptu.get_numpy(latent_distribution_params_s)
+    # Merge sim & real data together to make same relative coordinate
+    latents = np.concatenate((latents_s, latents_r), axis=0)
+
+    # ===================== PROJECTING AND PLOTTING =====================
     # T-SNE
     time_start = time.time()
     tsne = TSNE(n_components=3, verbose=1, perplexity=40, n_iter=300, random_state=0)
@@ -184,13 +197,43 @@ def main(args):
     ys_r = tsne_results[:, 1]
     zs_r = tsne_results[:, 2]
 
-    n_data = len(images_r)
-    ax.scatter3D(xs_r[:n_data], ys_r[:n_data], zs_r[:n_data], c='r', marker='o', s=3, alpha=0.6)
-    ax.scatter3D(xs_r[n_data:], ys_r[n_data:], zs_r[n_data:], c='b', marker='o', s=3, alpha=0.6)
-    plt.legend(['Sim', 'Real'])
+    n_data = len(pair_im_tgt)
+    n_train = len(pair_src_train)
+
+    ax.scatter3D(xs_r[:n_train], ys_r[:n_train], zs_r[:n_train],
+                 c='r', marker='o', s=3, alpha=0.6)
+    ax.scatter3D(xs_r[n_data:n_data + n_train], ys_r[n_data:n_data + n_train], zs_r[n_data:n_data + n_train],
+                 c='b', marker='o', s=3, alpha=0.6)
+
+    if user_args.split:
+        plt.legend(['Sim_train', 'Real_train'])
+        plt.title('Training')
+        plt.figure()
+        ax1 = plt.axes(projection='3d')
+        ax1.scatter3D(xs_r[n_train:n_data], ys_r[n_train:n_data], zs_r[n_train:n_data],
+                      c='darkorange', marker='^', s=4, alpha=0.9)
+        ax1.scatter3D(xs_r[n_data + n_train:], ys_r[n_data + n_train:], zs_r[n_data + n_train:],
+                      c='darkgreen', marker='^', s=4, alpha=0.9)
+        plt.legend(['Sim_eval', 'Real_eval'])
+        plt.title('Validation')
+    else:
+        ax.scatter3D(xs_r[n_train:n_data], ys_r[n_train:n_data], zs_r[n_train:n_data],
+                     c='darkorange', marker='^', s=4, alpha=0.9)
+        ax.scatter3D(xs_r[n_data + n_train:], ys_r[n_data + n_train:], zs_r[n_data + n_train:],
+                     c='darkgreen', marker='^', s=4, alpha=0.9)
+        plt.legend(['Sim_train', 'Real_train', 'Sim_eval', 'Real_eval'])
 
     plt.show()
 
+
+parser = argparse.ArgumentParser()
+parser.add_argument('file', type=str, help='path to the snapshot file')
+parser.add_argument('--vae', type=str, default=None, help='path to the vae real checkpoint')
+parser.add_argument('--gan', type=str, default=None, help='path to the vae real checkpoint')
+parser.add_argument('--mode', default='video_env', type=str, help='env mode')
+parser.add_argument('--gpu', action='store_false')
+parser.add_argument('--split', action='store_true')
+user_args = parser.parse_args()
 
 if __name__ == "__main__":
     """
@@ -199,14 +242,7 @@ if __name__ == "__main__":
         vae: Path to trained adapted VAE (e.g.: /path/to/vae_file, contains vae_ckpt.pth) 
         path_to_images_r, path_to_images_s: Path to data want to plot (in main() function)
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument('file', type=str, help='path to the snapshot file')
-    parser.add_argument('--vae', type=str, default=None, help='path to the vae real checkpoint')
-    parser.add_argument('--gan', type=str, default=None, help='path to the vae real checkpoint')
-    parser.add_argument('--mode', default='video_env', type=str, help='env mode')
-    parser.add_argument('--gpu', action='store_false')
-    args = parser.parse_args()
 
-    main(args)
+    main(user_args)
     # debug_learning_curve_learned_vae(args)
 
